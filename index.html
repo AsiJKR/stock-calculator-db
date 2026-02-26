@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSE Sector Explorer</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --ink: #1a1a2e; --paper: #f7f3ee; --cream: #ede8e0;
+    --accent: #c0392b; --accent-light: #f0d9d7; --gold: #b8962e;
+    --muted: #6b6b7b; --border: #d4cfc8; --white: #ffffff;
+    --green: #1a7f4b; --green-bg: #eaf7f0;
+  }
+  body { font-family: 'DM Sans', sans-serif; background: var(--paper); color: var(--ink); min-height: 100vh; }
+
+  header { background: var(--ink); padding: 2rem 3rem; position: relative; overflow: hidden; }
+  header::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--accent), var(--gold), var(--accent)); }
+  .header-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  .header-left { display: flex; align-items: center; gap: 1rem; }
+  .back-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #ccc; padding: 0.45rem 0.9rem; border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.8rem; cursor: pointer; transition: background 0.2s; display: none; align-items: center; gap: 0.4rem; }
+  .back-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .back-btn.visible { display: flex; }
+  .label { font-size: 0.68rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 0.3rem; }
+  header h1 { font-family: 'Playfair Display', serif; font-size: clamp(1.4rem, 3.5vw, 2.2rem); color: var(--white); line-height: 1.2; }
+  .header-subtitle { color: #a0a0b8; font-size: 0.82rem; margin-top: 0.25rem; font-weight: 300; }
+  .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; }
+  .header-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; justify-content: flex-end; }
+  .upload-btn { display: inline-flex; align-items: center; gap: 0.5rem; background: transparent; border: 1.5px solid rgba(184,150,46,0.6); color: var(--gold); padding: 0.55rem 1.1rem; border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: background 0.2s; white-space: nowrap; position: relative; }
+  .upload-btn:hover { background: rgba(184,150,46,0.12); }
+  .upload-btn input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+  .saved-nav-btn { display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: #e0e0f0; padding: 0.5rem 1rem; border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
+  .saved-nav-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .saved-count-badge { background: var(--gold); color: var(--ink); border-radius: 10px; padding: 0.1rem 0.45rem; font-size: 0.68rem; font-weight: 700; display: none; }
+  .file-loaded-badge { display: none; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: #6ee89a; }
+  .file-loaded-badge.visible { display: flex; }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 2.5rem 2rem; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* UPLOAD */
+  #upload-prompt { background: var(--white); border: 2px dashed var(--border); border-radius: 14px; padding: 4rem 2rem; text-align: center; transition: border-color 0.2s, background 0.2s; margin-bottom: 1.5rem; }
+  #upload-prompt.dragover { border-color: var(--accent); background: var(--accent-light); }
+  .upload-icon { font-size: 2.8rem; margin-bottom: 1rem; }
+  #upload-prompt h2 { font-family: 'Playfair Display', serif; font-size: 1.35rem; margin-bottom: 0.6rem; }
+  #upload-prompt p { color: var(--muted); font-size: 0.88rem; margin-bottom: 1.5rem; line-height: 1.7; }
+  .upload-cta { position: relative; display: inline-block; }
+  .upload-cta-btn { background: var(--accent); color: var(--white); border: none; padding: 0.75rem 2rem; border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 0.92rem; font-weight: 500; cursor: pointer; transition: background 0.2s; }
+  .upload-cta-btn:hover { background: #a93226; }
+  .upload-cta input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+  .upload-hint { margin-top: 1rem; font-size: 0.78rem; color: var(--muted); }
+  .saved-shortcut { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 1.2rem 1.8rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04); flex-wrap: wrap; }
+  .saved-shortcut p { font-size: 0.88rem; color: var(--muted); }
+  .saved-shortcut p strong { color: var(--ink); }
+  .view-saved-btn { background: var(--ink); color: var(--white); border: none; padding: 0.55rem 1.2rem; border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 500; cursor: pointer; white-space: nowrap; transition: background 0.2s; }
+  .view-saved-btn:hover { background: #2d2d4a; }
+
+  /* SECTOR */
+  .search-card { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 1.6rem 2rem; margin-bottom: 2rem; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+  .search-card label { display: block; font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.55rem; font-weight: 500; }
+  .select-wrapper { position: relative; }
+  select { width: 100%; appearance: none; background: var(--cream); border: 1.5px solid var(--border); border-radius: 8px; padding: 0.8rem 3rem 0.8rem 1.1rem; font-family: 'DM Sans', sans-serif; font-size: 0.97rem; color: var(--ink); cursor: pointer; transition: border-color 0.2s; }
+  select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+  .select-arrow { position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--muted); }
+  #results { display: none; }
+  .results-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.6rem; padding-bottom: 0.8rem; border-bottom: 1.5px solid var(--border); }
+  .results-title { font-family: 'Playfair Display', serif; font-size: 1.3rem; }
+  .results-count { font-size: 0.78rem; color: var(--muted); }
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.87rem; background: var(--white); }
+  thead tr { background: var(--ink); color: var(--white); }
+  th { padding: 0.8rem 1rem; text-align: left; font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; white-space: nowrap; }
+  td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--cream); white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #faf8f5; }
+  tbody tr:nth-child(even) { background: #fcfaf7; }
+  tbody tr:nth-child(even):hover { background: #f5f2ee; }
+  .company-name { font-weight: 500; }
+
+  /* INVEST */
+  .page-header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.8rem; flex-wrap: wrap; }
+  .invest-company-title { font-family: 'Playfair Display', serif; font-size: 1.6rem; color: var(--ink); }
+  .invest-company-sub { font-size: 0.82rem; color: var(--muted); margin-top: 0.2rem; }
+  .save-btn { background: var(--green); color: var(--white); border: none; padding: 0.55rem 1.3rem; border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 0.84rem; font-weight: 600; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
+  .save-btn:hover { background: #158040; }
+  .save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .summary-table-wrap { background: var(--white); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+  .summary-table-title { padding: 0.75rem 1.2rem; background: var(--ink); color: var(--white); font-size: 0.67rem; letter-spacing: 0.15em; text-transform: uppercase; font-weight: 500; }
+  .summary-scroll { overflow-x: auto; }
+  .summary-table { border-collapse: collapse; font-size: 0.82rem; white-space: nowrap; min-width: 100%; }
+  .summary-table th { background: var(--cream); padding: 0.5rem 1rem; text-align: center; font-size: 0.67rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--border); }
+  .summary-table td { padding: 0.55rem 1rem; text-align: center; border-bottom: 1px solid var(--cream); }
+  .summary-table tr:last-child td { border-bottom: none; }
+  .div-val { font-family: 'Playfair Display', serif; font-weight: 600; color: var(--ink); }
+  .div-empty { color: var(--border); }
+  .latest-col { background: #fffbf0; border-left: 2px solid var(--gold); border-right: 2px solid var(--gold); }
+  .summary-table th.latest-col { background: #f5ead0; }
+
+  .invest-card { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 1.6rem 2rem; margin-bottom: 1.5rem; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+  .invest-card-title { font-size: 0.67rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); margin-bottom: 1.2rem; font-weight: 500; }
+  .input-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1.2rem; }
+  .input-group { display: flex; flex-direction: column; gap: 0.4rem; }
+  .input-group label { font-size: 0.72rem; font-weight: 500; color: var(--ink); }
+  .input-group .desc { font-size: 0.7rem; color: var(--muted); margin-top: -0.2rem; }
+  .input-group input { background: var(--cream); border: 1.5px solid var(--border); border-radius: 7px; padding: 0.65rem 0.9rem; font-family: 'DM Sans', sans-serif; font-size: 0.95rem; color: var(--ink); transition: border-color 0.2s, box-shadow 0.2s; }
+  .input-group input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+  .result-highlight        { background: var(--green-bg); border: 1.5px solid #a8d5be; border-radius: 7px; padding: 0.65rem 0.9rem; font-family: 'Playfair Display', serif; font-size: 1.05rem; color: var(--green); font-weight: 600; }
+  .result-highlight-orange { background: #fff4e5; border: 1.5px solid #f0a030; border-radius: 7px; padding: 0.65rem 0.9rem; font-family: 'Playfair Display', serif; font-size: 1.05rem; color: #c07010; font-weight: 600; }
+  .result-highlight-red    { background: #fdecea; border: 1.5px solid #e57373; border-radius: 7px; padding: 0.65rem 0.9rem; font-family: 'Playfair Display', serif; font-size: 1.05rem; color: #c0392b; font-weight: 600; }
+  .result-na               { background: var(--cream); border: 1.5px solid var(--border); border-radius: 7px; padding: 0.65rem 0.9rem; font-size: 0.88rem; color: var(--muted); }
+  #fetch-price-btn:hover   { background: #2d2d4a !important; }
+  #fetch-price-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .price-live-badge        { font-size: 0.68rem; color: var(--green); font-weight: 500; }
+  .price-live-badge.error  { color: var(--accent); }
+
+  /* SAVED PAGE */
+  .saved-header-row  { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .saved-page-title  { font-family: 'Playfair Display', serif; font-size: 1.5rem; color: var(--ink); }
+  .saved-page-sub    { font-size: 0.82rem; color: var(--muted); margin-top: 0.2rem; }
+  .saved-toolbar     { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin-bottom: 1.2rem; }
+  .filter-wrap       { flex: 1; min-width: 200px; max-width: 300px; position: relative; }
+  .filter-wrap select { padding: 0.6rem 2.5rem 0.6rem 0.9rem; font-size: 0.88rem; }
+  .cmp-sel-btn { background: var(--gold); color: var(--ink); border: none; padding: 0.5rem 1.1rem; border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 600; cursor: pointer; white-space: nowrap; display: none; transition: background 0.2s; }
+  .cmp-sel-btn.visible { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .cmp-sel-btn:hover { background: #d4a830; }
+  .saved-count-txt   { font-size: 0.78rem; color: var(--muted); }
+  .empty-state { text-align: center; padding: 4rem 2rem; background: var(--white); border: 2px dashed var(--border); border-radius: 14px; }
+  .empty-icon  { font-size: 2.5rem; margin-bottom: 1rem; }
+  .empty-state h3 { font-family: 'Playfair Display', serif; font-size: 1.2rem; margin-bottom: 0.5rem; }
+  .empty-state p  { color: var(--muted); font-size: 0.86rem; }
+  .saved-table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+  .saved-tbl { width: 100%; border-collapse: collapse; font-size: 0.84rem; background: var(--white); }
+  .saved-tbl thead tr { background: var(--ink); color: var(--white); }
+  .saved-tbl th { padding: 0.75rem 0.85rem; text-align: left; font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; white-space: nowrap; }
+  .saved-tbl td { padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--cream); white-space: nowrap; vertical-align: middle; }
+  .saved-tbl tbody tr:last-child td { border-bottom: none; }
+  .saved-tbl tbody tr:hover { background: #faf8f5; }
+  .saved-tbl tbody tr:nth-child(even) { background: #fcfaf7; }
+  .saved-tbl tbody tr:nth-child(even):hover { background: #f5f2ee; }
+  .sel-col { width: 34px; text-align: center; }
+  .saved-tbl input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--ink); }
+  .vg { color: var(--green); font-weight: 600; font-family: 'Playfair Display', serif; }
+  .vo { color: #c07010;       font-weight: 600; font-family: 'Playfair Display', serif; }
+  .vr { color: var(--accent); font-weight: 600; font-family: 'Playfair Display', serif; }
+  .vna { color: var(--border); }
+  .del-btn { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 5px; padding: 0.22rem 0.5rem; font-size: 0.72rem; cursor: pointer; transition: all 0.15s; }
+  .del-btn:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+  .loading-msg { text-align: center; padding: 3rem; color: var(--muted); }
+
+  /* COMPARE MODAL */
+  #cmp-overlay { display: none; position: fixed; inset: 0; background: rgba(10,10,20,0.6); z-index: 100; backdrop-filter: blur(3px); align-items: center; justify-content: center; padding: 1.5rem; }
+  #cmp-overlay.visible { display: flex; }
+  #cmp-modal { background: var(--white); border-radius: 14px; width: 100%; max-width: 960px; max-height: 88vh; overflow-y: auto; box-shadow: 0 24px 60px rgba(0,0,0,0.35); animation: up 0.22s ease; }
+  @keyframes up { from { transform: translateY(18px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .cmp-head { background: var(--ink); padding: 1.2rem 1.6rem; border-radius: 14px 14px 0 0; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 1; }
+  .cmp-head-title { font-family: 'Playfair Display', serif; font-size: 1.1rem; color: var(--white); }
+  .cmp-close { background: rgba(255,255,255,0.1); border: none; color: var(--white); width: 30px; height: 30px; border-radius: 50%; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
+  .cmp-close:hover { background: rgba(255,255,255,0.2); }
+  .cmp-body { padding: 1.4rem 1.6rem; overflow-x: auto; }
+  .cmp-tbl { border-collapse: collapse; font-size: 0.84rem; width: 100%; background: var(--white); }
+  .cmp-tbl th { background: var(--ink); color: var(--white); padding: 0.75rem 1rem; text-align: center; font-size: 0.64rem; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; }
+  .cmp-tbl th.mc { text-align: left; min-width: 140px; }
+  .cmp-tbl td { padding: 0.6rem 1rem; border-bottom: 1px solid var(--cream); text-align: center; white-space: nowrap; }
+  .cmp-tbl td.ml { text-align: left; font-size: 0.75rem; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; background: #faf8f5; }
+  .cmp-tbl tr:last-child td { border-bottom: none; }
+  .cmp-tbl tr:hover td { background: #faf8f5; }
+  .cmp-tbl tr:hover td.ml { background: #f0ede8; }
+
+  /* CONFIRM */
+  #conf-overlay { display: none; position: fixed; inset: 0; background: rgba(10,10,20,0.55); z-index: 300; backdrop-filter: blur(3px); align-items: center; justify-content: center; padding: 1.5rem; }
+  #conf-overlay.visible { display: flex; }
+  #conf-box { background: var(--white); border-radius: 12px; padding: 2rem; max-width: 420px; width: 100%; box-shadow: 0 20px 50px rgba(0,0,0,0.3); animation: up 0.2s ease; }
+  .conf-title { font-family: 'Playfair Display', serif; font-size: 1.1rem; margin-bottom: 0.6rem; }
+  .conf-msg   { font-size: 0.87rem; color: var(--muted); line-height: 1.6; margin-bottom: 1.4rem; }
+  .conf-btns  { display: flex; gap: 0.7rem; justify-content: flex-end; }
+  .conf-yes { background: var(--accent); color: var(--white); border: none; padding: 0.55rem 1.2rem; border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+  .conf-yes:hover { background: #a93226; }
+  .conf-no  { background: var(--cream); color: var(--ink); border: 1px solid var(--border); padding: 0.55rem 1.2rem; border-radius: 7px; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; cursor: pointer; }
+  .conf-no:hover { background: var(--border); }
+
+  #toast { display: none; position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%); background: #2d2d2d; color: #fff; padding: 0.75rem 1.4rem; border-radius: 8px; font-size: 0.83rem; z-index: 999; box-shadow: 0 4px 20px rgba(0,0,0,0.2); white-space: nowrap; }
+  footer { text-align: center; padding: 1.8rem; font-size: 0.76rem; color: var(--muted); border-top: 1px solid var(--border); margin-top: 3rem; }
+
+  @media (max-width: 700px) {
+    header { padding: 1.5rem 1.2rem; }
+    main { padding: 1.5rem 1rem; }
+    .input-grid { grid-template-columns: 1fr; }
+    .saved-shortcut { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-left">
+      <button class="back-btn" id="back-btn">&#8592; Back</button>
+      <div>
+        <div class="label">Colombo Stock Exchange</div>
+        <h1 id="header-title">Sector Explorer</h1>
+        <div class="header-subtitle" id="header-subtitle">Browse listed companies by industry sector</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="header-actions">
+        <button class="saved-nav-btn" id="saved-nav-btn">
+          &#128190; Saved Investments
+          <span class="saved-count-badge" id="saved-badge">0</span>
+        </button>
+        <label class="upload-btn">&#8593;&nbsp;Load CSV<input type="file" id="header-file-input" accept=".csv"></label>
+      </div>
+      <div class="file-loaded-badge" id="file-badge">&#10003; <span id="file-name-badge"></span></div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- PAGE 1: Upload -->
+  <div class="page active" id="page-upload">
+    <div id="upload-prompt">
+      <div class="upload-icon">&#128194;</div>
+      <h2>Load your sheet data</h2>
+      <p>Download your Google Sheet as <strong>CSV</strong><br>
+        <em>File &rarr; Download &rarr; Comma Separated Values (.csv)</em><br><br>
+        Then upload it here to explore companies by sector.
+      </p>
+      <div class="upload-cta">
+        <button class="upload-cta-btn">Choose CSV file</button>
+        <input type="file" id="main-file-input" accept=".csv">
+      </div>
+      <p class="upload-hint">Or drag &amp; drop the file onto this box</p>
+    </div>
+    <div class="saved-shortcut">
+      <p>Already have saved records? <strong>View Saved Investments</strong> without uploading a CSV.</p>
+      <button class="view-saved-btn" id="upload-view-saved-btn">View Saved &rarr;</button>
+    </div>
+  </div>
+
+  <!-- PAGE 2: Sector -->
+  <div class="page" id="page-sector">
+    <div class="search-card">
+      <label for="category-select">Select a Sector</label>
+      <div class="select-wrapper">
+        <select id="category-select">
+          <option value="">— Choose a sector —</option>
+          <option>Application Software</option><option>Banking</option><option>Finance</option>
+          <option>Insurance</option><option>Beverage, Food &amp; Tobacco</option>
+          <option>Chemicals &amp; Pharmaceuticals</option><option>Commercial &amp; Professional Services</option>
+          <option>Construction Engineering</option><option>Diversified</option>
+          <option>Footwear &amp; Textile</option><option>Health Care</option><option>Hotels</option>
+          <option>Information Technology</option><option>Investment Trusts</option>
+          <option>Land &amp; Property</option><option>Manufacturing</option><option>Motor</option>
+          <option>Oil Palms</option><option>Plantations</option><option>Power &amp; Energy</option>
+          <option>Services</option><option>Stores &amp; Supplies</option>
+          <option>Telecommunications</option><option>Trading</option><option>Transportation</option>
+        </select>
+        <span class="select-arrow">&#9662;</span>
+      </div>
+    </div>
+    <div id="results">
+      <div class="results-header">
+        <div class="results-title" id="results-title"></div>
+        <div class="results-count" id="results-count"></div>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr id="table-head"></tr></thead><tbody id="table-body"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAGE 3: Investment Calculator -->
+  <div class="page" id="page-invest">
+    <div class="page-header-row">
+      <div>
+        <div class="invest-company-title" id="invest-company-name"></div>
+        <div class="invest-company-sub" id="invest-company-sub"></div>
+      </div>
+      <button class="save-btn" id="save-btn">&#128190; Save</button>
+    </div>
+
+    <div class="summary-table-wrap">
+      <div class="summary-table-title">Dividend History — Last 10 Years</div>
+      <div class="summary-scroll">
+        <table class="summary-table">
+          <thead><tr id="summary-head"></tr></thead>
+          <tbody><tr id="summary-row"></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="invest-card">
+      <div class="invest-card-title">Investment Calculator</div>
+      <div class="input-grid">
+
+        <div class="input-group">
+          <label>Price (LKR)</label>
+          <div class="desc">Current or purchase price</div>
+          <div style="display:flex;gap:0.4rem;align-items:center;">
+            <input type="number" id="input-price" placeholder="e.g. 45.50" step="0.01" min="0" style="flex:1;">
+            <button id="fetch-price-btn" title="Fetch live price"
+              style="background:var(--ink);color:var(--white);border:none;border-radius:6px;padding:0.5rem 0.7rem;cursor:pointer;font-size:0.8rem;white-space:nowrap;flex-shrink:0;transition:background 0.2s;">
+              &#8635; Live
+            </button>
+          </div>
+          <div id="price-status" style="font-size:0.7rem;color:var(--muted);min-height:1rem;margin-top:0.15rem;"></div>
+        </div>
+
+        <div class="input-group">
+          <label>EPS</label>
+          <div class="desc">Earnings per share</div>
+          <input type="number" id="input-eps" placeholder="e.g. 3.20" step="0.01">
+        </div>
+
+        <div class="input-group">
+          <label>Dividend Yield</label>
+          <div class="desc">Latest dividend ÷ Price × 100</div>
+          <div id="yield-display" class="result-na">Enter price above</div>
+        </div>
+
+        <div class="input-group">
+          <label>PE Ratio</label>
+          <div class="desc">Price ÷ EPS</div>
+          <div id="pe-display" class="result-na">Enter price &amp; EPS</div>
+        </div>
+
+        <div class="input-group">
+          <label>NAV</label>
+          <div class="desc">Net asset value per share</div>
+          <input type="number" id="input-nav" placeholder="e.g. 12.50" step="0.01">
+        </div>
+
+        <div class="input-group">
+          <label>PBV</label>
+          <div class="desc">Price ÷ NAV</div>
+          <div id="pbv-display" class="result-na">Enter price &amp; NAV</div>
+        </div>
+
+        <div class="input-group">
+          <label>Total Liabilities</label>
+          <div class="desc">From balance sheet</div>
+          <input type="text" id="input-liab" placeholder="e.g. 1,250,000">
+        </div>
+
+        <div class="input-group">
+          <label>Total Equity</label>
+          <div class="desc">From balance sheet</div>
+          <input type="text" id="input-eq" placeholder="e.g. 980,000">
+        </div>
+
+        <div class="input-group">
+          <label>Debt to Equity</label>
+          <div class="desc">Total liabilities ÷ equity</div>
+          <div id="de-display" style="background:var(--cream);border:1.5px solid var(--border);border-radius:7px;padding:0.65rem 0.9rem;font-size:0.95rem;color:var(--muted);min-height:2.7rem;transition:background 0.2s,border-color 0.2s,color 0.2s;">—</div>
+        </div>
+
+        <div class="input-group">
+          <label>ROE (%)</label>
+          <div class="desc">Return on equity</div>
+          <input type="number" id="input-roe" placeholder="e.g. 14.5" step="0.01">
+        </div>
+
+        <div class="input-group">
+          <label>EPS Growth (%)</label>
+          <div class="desc">Year-on-year EPS growth</div>
+          <input type="number" id="input-epsg" placeholder="e.g. 8.2" step="0.01">
+        </div>
+
+        <div class="input-group">
+          <label>Revenue Growth (%)</label>
+          <div class="desc">Year-on-year revenue growth</div>
+          <input type="number" id="input-revg" placeholder="e.g. 12.0" step="0.01">
+        </div>
+
+      </div>
+    </div>
+
+    <div class="invest-card">
+      <div class="invest-card-title">Total Return</div>
+      <div class="input-grid">
+        <div class="input-group">
+          <div class="desc">Dividend Yield + ROE</div>
+          <div id="total-display" class="result-na">Enter price &amp; ROE</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAGE 4: Saved Investments -->
+  <div class="page" id="page-saved">
+    <div class="saved-header-row">
+      <div>
+        <div class="saved-page-title">Saved Investments</div>
+        <div class="saved-page-sub" id="saved-sub">Loading…</div>
+      </div>
+    </div>
+    <div class="saved-toolbar">
+      <div class="filter-wrap">
+        <select id="sector-filter">
+          <option value="">— All Sectors —</option>
+          <option>Application Software</option><option>Banking</option><option>Finance</option>
+          <option>Insurance</option><option>Beverage, Food &amp; Tobacco</option>
+          <option>Chemicals &amp; Pharmaceuticals</option><option>Commercial &amp; Professional Services</option>
+          <option>Construction Engineering</option><option>Diversified</option>
+          <option>Footwear &amp; Textile</option><option>Health Care</option><option>Hotels</option>
+          <option>Information Technology</option><option>Investment Trusts</option>
+          <option>Land &amp; Property</option><option>Manufacturing</option><option>Motor</option>
+          <option>Oil Palms</option><option>Plantations</option><option>Power &amp; Energy</option>
+          <option>Services</option><option>Stores &amp; Supplies</option>
+          <option>Telecommunications</option><option>Trading</option><option>Transportation</option>
+        </select>
+        <span class="select-arrow">&#9662;</span>
+      </div>
+      <button class="cmp-sel-btn" id="cmp-sel-btn">&#9654; Compare Selected (<span id="cmp-sel-count">0</span>)</button>
+      <span class="saved-count-txt" id="saved-count-txt"></span>
+    </div>
+    <div id="saved-content"><div class="loading-msg">Loading saved records…</div></div>
+  </div>
+
+</main>
+
+<!-- Compare Modal -->
+<div id="cmp-overlay">
+  <div id="cmp-modal">
+    <div class="cmp-head">
+      <div class="cmp-head-title">Compare Investments</div>
+      <button class="cmp-close" id="cmp-close">&#10005;</button>
+    </div>
+    <div class="cmp-body" id="cmp-body"></div>
+  </div>
+</div>
+
+<!-- Confirm Dialog -->
+<div id="conf-overlay">
+  <div id="conf-box">
+    <div class="conf-title" id="conf-title"></div>
+    <div class="conf-msg"   id="conf-msg"></div>
+    <div class="conf-btns">
+      <button class="conf-no"  id="conf-no">Cancel</button>
+      <button class="conf-yes" id="conf-yes">Overwrite</button>
+    </div>
+  </div>
+</div>
+
+<footer>Data loaded from your CSV · Colombo Stock Exchange</footer>
+<div id="toast"></div>
+
+<script>
+// ─── STORAGE API ───────────────────────────────────────────────────────────────
+// Reads/writes go to /.netlify/functions/investments → Upstash Redis
+// Data is shared across ALL users and devices.
+var API = '/.netlify/functions/investments';
+
+var CATS = new Set([
+  "Application Software","Banking","Finance","Insurance",
+  "Beverage, Food & Tobacco","Chemicals & Pharmaceuticals",
+  "Commercial & Professional Services","Construction Engineering",
+  "Diversified","Footwear & Textile","Health Care","Hotels",
+  "Information Technology","Investment Trusts","Land & Property",
+  "Manufacturing","Motor","Oil Palms","Plantations","Power & Energy",
+  "Services","Stores & Supplies","Telecommunications","Trading","Transportation"
+]);
+
+var allData = [], headers = [], currentCo = null, pageHist = ['upload'], records = [];
+
+// ─── NAVIGATION ────────────────────────────────────────────────────────────────
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+  document.getElementById('page-'+id).classList.add('active');
+  pageHist.push(id);
+  var back  = document.getElementById('back-btn');
+  var title = document.getElementById('header-title');
+  var sub   = document.getElementById('header-subtitle');
+  if (id==='upload'||id==='sector') {
+    back.classList.remove('visible');
+    title.textContent='Sector Explorer'; sub.textContent='Browse listed companies by industry sector';
+  } else if (id==='invest'&&currentCo) {
+    back.classList.add('visible');
+    title.textContent=currentCo.name; sub.textContent=currentCo.category+' · Investment Calculator';
+  } else if (id==='saved') {
+    back.classList.add('visible');
+    title.textContent='Saved Investments'; sub.textContent='Shared across all users & devices';
+  }
+  window.scrollTo(0,0);
+}
+
+document.getElementById('back-btn').addEventListener('click', function(){
+  pageHist.pop();
+  var prev=pageHist[pageHist.length-1]||'sector';
+  pageHist.pop();
+  showPage(prev);
+});
+
+// ─── CSV ───────────────────────────────────────────────────────────────────────
+function parseCSV(txt) {
+  var lines=txt.split(/\r?\n/),res=[];
+  for(var i=0;i<lines.length;i++){
+    if(!lines[i].trim())continue;
+    var cols=[],cur='',inQ=false;
+    for(var j=0;j<lines[i].length;j++){
+      var c=lines[i][j];
+      if(c==='"'){inQ=!inQ;continue;}
+      if(c===','&&!inQ){cols.push(cur.trim());cur='';continue;}
+      cur+=c;
+    }
+    cols.push(cur.trim()); res.push(cols);
+  }
+  return res;
+}
+
+function processData(rows){
+  allData=[];headers=[];
+  if(rows.length<2)return;
+  var raw=rows[1].map(function(h){return h.trim();});
+  raw[0]='Company'; if(!raw[1])raw[1]='Code'; headers=raw;
+  var cat=null;
+  for(var i=2;i<rows.length;i++){
+    var fc=(rows[i][0]||'').trim();
+    if(!fc)continue;
+    if(CATS.has(fc)){cat=fc;}
+    else if(cat){allData.push({category:cat,rowData:rows[i].map(function(c){return c.trim();})});}
+  }
+}
+
+function handleFile(file){
+  if(!file)return;
+  if(!file.name.endsWith('.csv')){toast('Please upload a .csv file');return;}
+  var r=new FileReader();
+  r.onload=function(e){
+    var rows=parseCSV(e.target.result);
+    processData(rows);
+    if(!allData.length){toast('No matching data found');return;}
+    document.getElementById('file-name-badge').textContent=file.name;
+    document.getElementById('file-badge').classList.add('visible');
+    document.getElementById('category-select').value='';
+    document.getElementById('results').style.display='none';
+    showPage('sector');
+    toast('Loaded '+allData.length+' companies');
+  };
+  r.readAsText(file);
+}
+
+// ─── SECTOR TABLE ──────────────────────────────────────────────────────────────
+function renderSector(cat){
+  var cos=allData.filter(function(d){return d.category===cat;});
+  var vis=headers.map(function(h,i){if(!h||/^\d{4}$/.test(h))return null;return i;}).filter(function(i){return i!==null;});
+  document.getElementById('table-head').innerHTML=
+    vis.map(function(i){return '<th>'+headers[i]+'</th>';}).join('')+'<th style="text-align:right">Actions</th>';
+  if(!cos.length){
+    document.getElementById('table-body').innerHTML='<tr><td colspan="'+(vis.length+1)+'" style="text-align:center;padding:2rem;color:var(--muted)">No companies found.</td></tr>';
+  } else {
+    document.getElementById('table-body').innerHTML=cos.map(function(item){
+      var cells=vis.map(function(i){
+        var v=item.rowData[i]||'';
+        return i===0?'<td class="company-name">'+v+'</td>':'<td>'+(v||'<span style="color:var(--border)">-</span>')+'</td>';
+      }).join('');
+      var enc=encodeURIComponent(item.rowData[0]||''),encC=encodeURIComponent(cat);
+      return '<tr>'+cells+'<td style="text-align:right"><button class="ri-btn" data-c="'+enc+'" data-cat="'+encC+'" '+
+        'style="background:var(--gold);color:var(--ink);border:none;padding:0.3rem 0.75rem;border-radius:5px;'+
+        'font-family:DM Sans,sans-serif;font-size:0.75rem;font-weight:600;cursor:pointer;">Investment</button></td></tr>';
+    }).join('');
+    document.querySelectorAll('.ri-btn').forEach(function(btn){
+      btn.addEventListener('click',function(e){
+        e.stopPropagation();
+        var co=buildCo(decodeURIComponent(this.dataset.c),decodeURIComponent(this.dataset.cat));
+        if(co){currentCo=co;openInvest();}
+      });
+    });
+  }
+  document.getElementById('results-title').textContent=cat;
+  document.getElementById('results-count').textContent=cos.length+' '+(cos.length===1?'company':'companies');
+  document.getElementById('results').style.display='block';
+}
+
+// ─── COMPANY HELPERS ───────────────────────────────────────────────────────────
+function buildCo(name,cat){
+  var item=allData.find(function(d){return d.rowData[0]===name&&d.category===cat;});
+  if(!item)return null;
+  var meta=[],yrs={};
+  headers.forEach(function(h,i){
+    if(!h)return;
+    var v=item.rowData[i]||'';
+    if(/^\d{4}$/.test(h))yrs[h]=v;
+    else if(i>0&&v)meta.push({label:h,value:v});
+  });
+  return{name:name,category:cat,rowData:item.rowData,yearData:yrs,metaFields:meta};
+}
+
+function latestDiv(co){
+  if(!co)return null;
+  var yrs=Object.keys(co.yearData).sort(function(a,b){return b-a;});
+  for(var i=0;i<yrs.length;i++){var p=parseFloat(co.yearData[yrs[i]]);if(!isNaN(p)&&p>0)return p;}
+  return null;
+}
+
+// ─── INVEST PAGE ───────────────────────────────────────────────────────────────
+function openInvest(){
+  if(!currentCo)return;
+  var co=currentCo;
+  document.getElementById('invest-company-name').textContent=co.name;
+  var code=co.metaFields.find(function(f){return f.label==='Code';});
+  document.getElementById('invest-company-sub').textContent=(code?code.value+' · ':'')+co.category;
+
+  var allYrs=Object.keys(co.yearData).sort(function(a,b){return b-a;});
+  var latY=allYrs.find(function(y){var v=parseFloat(co.yearData[y]);return !isNaN(v)&&v>0;});
+  var last10=allYrs.slice(0,10);
+  document.getElementById('summary-head').innerHTML=
+    '<th style="text-align:left;padding-left:1rem">Metric</th>'+
+    last10.map(function(y){var l=y===latY;return '<th class="'+(l?'latest-col':'')+'">'+y+(l?' ★':'')+'</th>';}).join('');
+  document.getElementById('summary-row').innerHTML=
+    '<td style="padding-left:1rem;font-size:0.78rem;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:0.05em">Dividend</td>'+
+    last10.map(function(y){
+      var v=co.yearData[y],l=y===latY,cl=l?'latest-col':'';
+      return(v&&parseFloat(v)>0)?'<td class="'+cl+'"><span class="div-val">'+v+'</span></td>':'<td class="'+cl+'"><span class="div-empty">-</span></td>';
+    }).join('');
+
+  // Pre-fill from saved record if exists
+  var saved=records.find(function(r){return r.name===co.name;});
+  if(saved){
+    document.getElementById('input-price').value=saved.price||'';
+    document.getElementById('input-eps').value  =saved.eps||'';
+    document.getElementById('input-nav').value  =saved.nav||'';
+    document.getElementById('input-liab').value =saved.liab||'';
+    document.getElementById('input-eq').value   =saved.eq||'';
+    document.getElementById('input-roe').value  =saved.roe||'';
+    document.getElementById('input-epsg').value =saved.epsg||'';
+    document.getElementById('input-revg').value =saved.revg||'';
+  } else {
+    ['input-price','input-eps','input-nav','input-liab','input-eq','input-roe','input-epsg','input-revg']
+      .forEach(function(id){document.getElementById(id).value='';});
+  }
+
+  // Reset calc displays
+  ['yield-display','pe-display','pbv-display','total-display'].forEach(function(id){
+    document.getElementById(id).className='result-na';
+  });
+  document.getElementById('yield-display').textContent='Enter price above';
+  document.getElementById('pe-display').textContent='Enter price & EPS';
+  document.getElementById('pbv-display').textContent='Enter price & NAV';
+  document.getElementById('total-display').textContent='Enter price & ROE';
+  var de=document.getElementById('de-display');
+  de.textContent='—';de.style.background='var(--cream)';de.style.borderColor='var(--border)';de.style.color='var(--muted)';
+  document.getElementById('price-status').innerHTML='';
+
+  showPage('invest');
+  if(saved)recalc();
+}
+
+// ─── LIVE PRICE ────────────────────────────────────────────────────────────────
+function fetchLive(){
+  if(!currentCo)return;
+  var cf=currentCo.metaFields.find(function(f){return f.label==='Code';});
+  var code=cf?cf.value.trim():null;
+  if(!code){setStatus('No stock code found',true);return;}
+  var sym=code+'.N0000';
+  var btn=document.getElementById('fetch-price-btn');
+  btn.disabled=true;btn.textContent='...';
+  document.getElementById('price-status').textContent='Fetching from CSE…';
+  fetch('/.netlify/functions/cse-price?symbol='+encodeURIComponent(sym))
+  .then(function(r){return r.json();})
+  .then(function(d){
+    btn.disabled=false;btn.innerHTML='↻ Live';
+    if(d&&d.reqSymbolInfo&&d.reqSymbolInfo.lastTradedPrice){
+      var p=d.reqSymbolInfo.lastTradedPrice,ch=d.reqSymbolInfo.change||0,pct=d.reqSymbolInfo.changePercentage||0;
+      document.getElementById('input-price').value=p;
+      var s=ch>=0?'+':'';
+      document.getElementById('price-status').innerHTML='<span class="price-live-badge">✓ LKR '+p+' ('+s+ch.toFixed(2)+' / '+s+pct.toFixed(2)+'%)</span>';
+      recalc();
+    } else {setStatus('Not found as '+sym+' — enter manually',true);}
+  })
+  .catch(function(){btn.disabled=false;btn.innerHTML='↻ Live';setStatus('Could not reach CSE — enter manually',true);});
+}
+function setStatus(m,e){var el=document.getElementById('price-status');el.textContent=m;el.className=e?'price-live-badge error':'';}
+
+// ─── CALCULATIONS ──────────────────────────────────────────────────────────────
+function cn(s){return parseFloat((s||'').replace(/[\s,]/g,''));}
+
+function recalc(){
+  if(!currentCo)return;
+  var price=parseFloat(document.getElementById('input-price').value);
+  var eps  =parseFloat(document.getElementById('input-eps').value);
+  var nav  =parseFloat(document.getElementById('input-nav').value);
+  var roe  =parseFloat(document.getElementById('input-roe').value);
+  var ld   =latestDiv(currentCo);
+
+  // Yield
+  var yEl=document.getElementById('yield-display'),dy=null;
+  if(price>0&&ld!==null){dy=ld/price*100;yEl.className='result-highlight';yEl.textContent=dy.toFixed(2)+'%';}
+  else{yEl.className='result-na';yEl.textContent=price>0?'No dividend data':'Enter price above';}
+
+  // PE
+  var peEl=document.getElementById('pe-display');
+  if(price>0&&eps>0){var pe=price/eps;peEl.className=pe<7?'result-highlight':pe<=8?'result-highlight-orange':'result-highlight-red';peEl.textContent=pe.toFixed(3);}
+  else{peEl.className='result-na';peEl.textContent='Enter price & EPS';}
+
+  // PBV
+  var pbvEl=document.getElementById('pbv-display');
+  if(price>0&&nav>0){var pbv=price/nav;pbvEl.className=pbv<=1?'result-highlight':'result-highlight-orange';pbvEl.textContent=pbv.toFixed(3);}
+  else{pbvEl.className='result-na';pbvEl.textContent='Enter price & NAV';}
+
+  // D/E
+  var deEl=document.getElementById('de-display');
+  var li=cn(document.getElementById('input-liab').value),eq=cn(document.getElementById('input-eq').value);
+  if(!isNaN(li)&&!isNaN(eq)&&eq!==0){
+    var de=li/eq;deEl.textContent=de.toFixed(2);
+    if(de<=1){deEl.style.background='var(--green-bg)';deEl.style.borderColor='#a8d5be';deEl.style.color='var(--green)';}
+    else{deEl.style.background='#fff4e5';deEl.style.borderColor='#f0a030';deEl.style.color='#c07010';}
+  } else {deEl.textContent='—';deEl.style.background='var(--cream)';deEl.style.borderColor='var(--border)';deEl.style.color='var(--muted)';}
+
+  // Total Return
+  var tEl=document.getElementById('total-display');
+  if(dy!==null&&!isNaN(roe)){tEl.className='result-highlight';tEl.textContent=(dy+roe).toFixed(2)+'%';}
+  else{tEl.className='result-na';tEl.textContent='Enter price & ROE';}
+}
+
+['input-price','input-eps','input-nav','input-roe','input-liab','input-eq'].forEach(function(id){
+  document.getElementById(id).addEventListener('input',recalc);
+});
+
+// ─── SAVE ──────────────────────────────────────────────────────────────────────
+function buildRecord(){
+  if(!currentCo)return null;
+  var price=document.getElementById('input-price').value;
+  var eps  =document.getElementById('input-eps').value;
+  var nav  =document.getElementById('input-nav').value;
+  var roe  =document.getElementById('input-roe').value;
+  var epsg =document.getElementById('input-epsg').value;
+  var revg =document.getElementById('input-revg').value;
+  var liab =document.getElementById('input-liab').value;
+  var eq   =document.getElementById('input-eq').value;
+  var pf=parseFloat(price),ef=parseFloat(eps),nf=parseFloat(nav),rf=parseFloat(roe);
+  var lf=cn(liab),qf=cn(eq),ld=latestDiv(currentCo);
+  var dy=(pf>0&&ld!==null)?ld/pf*100:null;
+  var code=currentCo.metaFields.find(function(f){return f.label==='Code';});
+  return{
+    name:currentCo.name,code:code?code.value:'',sector:currentCo.category,
+    savedAt:new Date().toISOString(),
+    price:price,eps:eps,nav:nav,roe:roe,epsg:epsg,revg:revg,liab:liab,eq:eq,
+    divYield:dy!==null?dy.toFixed(2):null,
+    pe:(pf>0&&ef>0)?(pf/ef).toFixed(3):null,
+    pbv:(pf>0&&nf>0)?(pf/nf).toFixed(3):null,
+    de:(!isNaN(lf)&&!isNaN(qf)&&qf!==0)?(lf/qf).toFixed(2):null,
+    totalReturn:(dy!==null&&!isNaN(rf))?(dy+rf).toFixed(2):null
+  };
+}
+
+document.getElementById('save-btn').addEventListener('click',function(){
+  if(!currentCo)return;
+  var rec=buildRecord();if(!rec)return;
+  var exists=records.find(function(r){return r.name===rec.name;});
+  if(exists){
+    confirm2('Company already saved','"'+rec.name+'" already has a saved record. Overwrite with current values?',function(){doSave(rec,true);});
+  } else {doSave(rec,false);}
+});
+
+function doSave(rec,overwrite){
+  var btn=document.getElementById('save-btn');
+  btn.disabled=true;btn.textContent='Saving…';
+  var rollback=records.slice();
+  if(overwrite){records=records.map(function(r){return r.name===rec.name?rec:r;});}
+  else{records.push(rec);}
+  persist(function(ok){
+    btn.disabled=false;btn.innerHTML='&#128190; Save';
+    if(ok){updateBadge();toast(overwrite?'Record updated ✓':'Saved ✓');}
+    else{records=rollback;toast('Save failed — please try again');}
+  });
+}
+
+// ─── UPSTASH STORAGE ───────────────────────────────────────────────────────────
+function persist(cb){
+  fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(records)})
+  .then(function(r){return r.json();}).then(function(d){cb(d.ok===true);}).catch(function(){cb(false);});
+}
+
+function loadRecords(cb){
+  fetch(API).then(function(r){return r.json();})
+  .then(function(d){records=(d.ok&&Array.isArray(d.data))?d.data:[];updateBadge();if(cb)cb();})
+  .catch(function(){records=[];updateBadge();if(cb)cb();});
+}
+
+function updateBadge(){
+  var b=document.getElementById('saved-badge');
+  b.textContent=records.length;
+  b.style.display=records.length>0?'inline':'none';
+}
+
+// ─── SAVED PAGE ────────────────────────────────────────────────────────────────
+var selForCmp=[];
+
+function openSavedPage(){
+  selForCmp=[];
+  document.getElementById('saved-content').innerHTML='<div class="loading-msg">Loading saved records…</div>';
+  showPage('saved');
+  loadRecords(function(){renderSaved();});
+}
+
+function renderSaved(){
+  var filter=document.getElementById('sector-filter').value;
+  var filtered=filter?records.filter(function(r){return r.sector===filter;}):records.slice();
+  document.getElementById('saved-sub').textContent=
+    records.length+' record'+(records.length!==1?'s':'')+' · shared across all users & devices';
+  document.getElementById('saved-count-txt').textContent='Showing '+filtered.length+' of '+records.length;
+  var el=document.getElementById('saved-content');
+
+  if(!filtered.length){
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">📊</div>'+
+      '<h3>'+(filter?'No records in this sector':'No saved investments yet')+'</h3>'+
+      '<p>'+(filter?'Try a different sector.':'Open a company\'s Investment page and press Save.')+'</p></div>';
+    updateCmpBtn();return;
+  }
+
+  var rows=filtered.map(function(r){
+    var sel=selForCmp.indexOf(r.name)!==-1;
+    var deCl=r.de?(parseFloat(r.de)<=1?'vg':'vo'):'';
+    var pbCl=r.pbv?(parseFloat(r.pbv)<=1?'vg':'vo'):'';
+    var peCl=r.pe?(parseFloat(r.pe)<7?'vg':parseFloat(r.pe)<=8?'vo':'vr'):'';
+    var dt=r.savedAt?new Date(r.savedAt).toLocaleDateString():'—';
+    function c(v,sfx,cl){return(v!==null&&v!==undefined&&v!=='')?'<td class="'+(cl||'')+'">'+v+(sfx||'')+'</td>':'<td class="vna">—</td>';}
+    return'<tr>'+
+      '<td class="sel-col"><input type="checkbox" class="ccb" data-n="'+encodeURIComponent(r.name)+'"'+(sel?' checked':'')+' ></td>'+
+      '<td><strong>'+r.name+'</strong></td>'+
+      '<td>'+(r.code||'—')+'</td>'+
+      '<td>'+r.sector+'</td>'+
+      c(r.price,'','')+c(r.divYield,'%','')+c(r.pe,'',peCl)+c(r.pbv,'',pbCl)+c(r.de,'',deCl)+
+      c(r.roe,'%','')+c(r.totalReturn,'%','')+
+      '<td>'+dt+'</td>'+
+      '<td><button class="del-btn" data-n="'+encodeURIComponent(r.name)+'">Delete</button></td>'+
+      '</tr>';
+  }).join('');
+
+  el.innerHTML='<div class="saved-table-wrap"><table class="saved-tbl">'+
+    '<thead><tr>'+
+    '<th class="sel-col"><input type="checkbox" id="sel-all"></th>'+
+    '<th>Company</th><th>Code</th><th>Sector</th>'+
+    '<th>Price</th><th>Div Yield</th><th>PE</th><th>PBV</th><th>D/E</th>'+
+    '<th>ROE</th><th>Total Return</th><th>Saved</th><th></th>'+
+    '</tr></thead><tbody>'+rows+'</tbody></table></div>';
+
+  document.getElementById('sel-all').addEventListener('change',function(){
+    var chk=this.checked;
+    el.querySelectorAll('.ccb').forEach(function(cb){
+      cb.checked=chk;var n=decodeURIComponent(cb.dataset.n);
+      if(chk&&selForCmp.indexOf(n)===-1)selForCmp.push(n);
+    });
+    if(!chk)selForCmp=[];updateCmpBtn();
+  });
+
+  el.querySelectorAll('.ccb').forEach(function(cb){
+    cb.addEventListener('change',function(){
+      var n=decodeURIComponent(this.dataset.n);
+      if(this.checked){if(selForCmp.indexOf(n)===-1)selForCmp.push(n);}
+      else{selForCmp=selForCmp.filter(function(x){return x!==n;});}
+      updateCmpBtn();
+    });
+  });
+
+  el.querySelectorAll('.del-btn').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var n=decodeURIComponent(this.dataset.n);
+      confirm2('Delete record?','Remove "'+n+'" from saved investments? This cannot be undone.',function(){
+        records=records.filter(function(r){return r.name!==n;});
+        selForCmp=selForCmp.filter(function(x){return x!==n;});
+        persist(function(ok){if(ok){updateBadge();renderSaved();toast('Deleted');}else{toast('Delete failed');}});
+      });
+    });
+  });
+  updateCmpBtn();
+}
+
+function updateCmpBtn(){
+  var b=document.getElementById('cmp-sel-btn');
+  document.getElementById('cmp-sel-count').textContent=selForCmp.length;
+  if(selForCmp.length>=2)b.classList.add('visible');else b.classList.remove('visible');
+}
+
+document.getElementById('sector-filter').addEventListener('change',function(){selForCmp=[];renderSaved();});
+document.getElementById('cmp-sel-btn').addEventListener('click',function(){
+  if(selForCmp.length<2){toast('Select at least 2 companies');return;}
+  openCmpModal(selForCmp);
+});
+
+// ─── COMPARE MODAL ─────────────────────────────────────────────────────────────
+var CMP=[
+  {k:'price',     l:'Price (LKR)',        s:''},
+  {k:'eps',       l:'EPS',               s:''},
+  {k:'divYield',  l:'Dividend Yield',    s:'%'},
+  {k:'pe',        l:'PE Ratio',          s:'', col:function(v){var f=parseFloat(v);return f<7?'vg':f<=8?'vo':'vr';}},
+  {k:'nav',       l:'NAV',               s:''},
+  {k:'pbv',       l:'PBV',               s:'', col:function(v){return parseFloat(v)<=1?'vg':'vo';}},
+  {k:'de',        l:'Debt to Equity',    s:'', col:function(v){return parseFloat(v)<=1?'vg':'vo';}},
+  {k:'roe',       l:'ROE (%)',            s:'%'},
+  {k:'epsg',      l:'EPS Growth (%)',     s:'%'},
+  {k:'revg',      l:'Revenue Growth (%)',s:'%'},
+  {k:'totalReturn',l:'Total Return',     s:'%'},
+];
+
+function openCmpModal(names){
+  var recs=names.map(function(n){return records.find(function(r){return r.name===n;});}).filter(Boolean);
+  if(!recs.length)return;
+  var head='<th class="mc">Metric</th>'+recs.map(function(r){
+    return'<th>'+r.name+'<br><span style="font-size:0.62rem;opacity:0.7;font-weight:400">'+r.sector+'</span></th>';
+  }).join('');
+  var body=CMP.map(function(f){
+    var cells=recs.map(function(r){
+      var v=r[f.k];
+      if(v===null||v===undefined||v==='')return'<td class="vna">—</td>';
+      var cl=f.col?f.col(v):'';
+      return'<td class="'+cl+'">'+v+f.s+'</td>';
+    }).join('');
+    return'<tr><td class="ml">'+f.l+'</td>'+cells+'</tr>';
+  }).join('');
+  document.getElementById('cmp-body').innerHTML=
+    '<table class="cmp-tbl"><thead><tr>'+head+'</tr></thead><tbody>'+body+'</tbody></table>';
+  document.getElementById('cmp-overlay').classList.add('visible');
+  document.body.style.overflow='hidden';
+}
+
+function closeCmp(){document.getElementById('cmp-overlay').classList.remove('visible');document.body.style.overflow='';}
+document.getElementById('cmp-close').addEventListener('click',closeCmp);
+document.getElementById('cmp-overlay').addEventListener('click',function(e){if(e.target===this)closeCmp();});
+
+// ─── CONFIRM DIALOG ────────────────────────────────────────────────────────────
+var confCb=null;
+function confirm2(title,msg,onYes){
+  document.getElementById('conf-title').textContent=title;
+  document.getElementById('conf-msg').textContent=msg;
+  confCb=onYes;
+  document.getElementById('conf-overlay').classList.add('visible');
+  document.body.style.overflow='hidden';
+}
+document.getElementById('conf-yes').addEventListener('click',function(){
+  document.getElementById('conf-overlay').classList.remove('visible');
+  document.body.style.overflow='';
+  if(confCb){confCb();confCb=null;}
+});
+document.getElementById('conf-no').addEventListener('click',function(){
+  document.getElementById('conf-overlay').classList.remove('visible');
+  document.body.style.overflow='';confCb=null;
+});
+
+// ─── WIRING ────────────────────────────────────────────────────────────────────
+document.getElementById('fetch-price-btn').addEventListener('click',fetchLive);
+document.getElementById('saved-nav-btn').addEventListener('click',openSavedPage);
+document.getElementById('upload-view-saved-btn').addEventListener('click',openSavedPage);
+document.getElementById('main-file-input').addEventListener('change',function(e){handleFile(e.target.files[0]);});
+document.getElementById('header-file-input').addEventListener('change',function(e){handleFile(e.target.files[0]);});
+document.getElementById('category-select').addEventListener('change',function(){
+  if(!this.value){document.getElementById('results').style.display='none';return;}
+  renderSector(this.value);
+});
+var upBox=document.getElementById('upload-prompt');
+upBox.addEventListener('dragover',function(e){e.preventDefault();upBox.classList.add('dragover');});
+upBox.addEventListener('dragleave',function(){upBox.classList.remove('dragover');});
+upBox.addEventListener('drop',function(e){e.preventDefault();upBox.classList.remove('dragover');handleFile(e.dataTransfer.files[0]);});
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){closeCmp();document.getElementById('conf-overlay').classList.remove('visible');document.body.style.overflow='';}
+});
+
+// ─── TOAST ─────────────────────────────────────────────────────────────────────
+var toastT;
+function toast(msg){
+  var t=document.getElementById('toast');t.textContent=msg;t.style.display='block';
+  clearTimeout(toastT);toastT=setTimeout(function(){t.style.display='none';},3500);
+}
+
+// ─── INIT ───────────────────────────────────────────────────────────────────────
+loadRecords(); // fetch on startup so badge shows correct count
+</script>
+</body>
+</html>
