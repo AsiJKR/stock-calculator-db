@@ -132,10 +132,10 @@
   .empty-state h3 { font-family: 'Playfair Display', serif; font-size: 1.2rem; margin-bottom: 0.5rem; }
   .empty-state p  { color: var(--muted); font-size: 0.86rem; }
   .saved-table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-  .saved-tbl { width: 100%; border-collapse: collapse; font-size: 0.84rem; background: var(--white); }
+  .saved-tbl { width: 100%; border-collapse: collapse; font-size: 0.76rem; background: var(--white); }
   .saved-tbl thead tr { background: var(--ink); color: var(--white); }
-  .saved-tbl th { padding: 0.75rem 0.85rem; text-align: left; font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; white-space: nowrap; }
-  .saved-tbl td { padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--cream); white-space: nowrap; vertical-align: middle; }
+  .saved-tbl th { padding: 0.6rem 0.55rem; text-align: left; font-size: 0.58rem; letter-spacing: 0.07em; text-transform: uppercase; font-weight: 500; white-space: nowrap; }
+  .saved-tbl td { padding: 0.48rem 0.55rem; border-bottom: 1px solid var(--cream); white-space: nowrap; vertical-align: middle; }
   .saved-tbl tbody tr:last-child td { border-bottom: none; }
   .saved-tbl tbody tr:hover { background: #faf8f5; }
   .saved-tbl tbody tr:nth-child(even) { background: #fcfaf7; }
@@ -817,15 +817,14 @@ function renderSaved(){
     var deCl=r.de?(parseFloat(r.de)<=1?'vg':'vo'):'';
     var pbCl=r.pbv?(parseFloat(r.pbv)<=1?'vg':'vo'):'';
     var peCl=r.pe?(parseFloat(r.pe)<7?'vg':parseFloat(r.pe)<=8?'vo':'vr'):'';
-    var dt=r.savedAt?new Date(r.savedAt).toLocaleDateString():'—';
+    var dt=r.savedAt?new Date(r.savedAt).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).replace(',',''):'—';
     function c(v,sfx,cl){return(v!==null&&v!==undefined&&v!=='')?'<td class="'+(cl||'')+'">'+v+(sfx||'')+'</td>':'<td class="vna">—</td>';}
     return'<tr>'+
       '<td class="sel-col"><input type="checkbox" class="ccb" data-n="'+encodeURIComponent(r.name)+'"'+(sel?' checked':'')+' ></td>'+
       '<td><strong>'+r.name+'</strong></td>'+
-      '<td>'+(r.code||'—')+'</td>'+
-      '<td>'+r.sector+'</td>'+
-      c(r.price,'','')+c(r.divYield,'%','')+c(r.pe,'',peCl)+c(r.pbv,'',pbCl)+c(r.de,'',deCl)+
-      c(r.roe,'%','')+c(r.totalReturn,'%','')+
+      c(r.price,'','')+c(r.eps,'','')+c(r.divYield,'%','')+c(r.pe,'',peCl)+
+      c(r.nav,'','')+c(r.pbv,'',pbCl)+c(r.de,'',deCl)+
+      c(r.roe,'%','')+c(r.epsg,'%','')+c(r.revg,'%','')+c(r.totalReturn,'%','')+
       '<td>'+dt+'</td>'+
       '<td><button class="del-btn" data-n="'+encodeURIComponent(r.name)+'">Delete</button></td>'+
       '</tr>';
@@ -834,9 +833,11 @@ function renderSaved(){
   el.innerHTML='<div class="saved-table-wrap"><table class="saved-tbl">'+
     '<thead><tr>'+
     '<th class="sel-col"><input type="checkbox" id="sel-all"></th>'+
-    '<th>Company</th><th>Code</th><th>Sector</th>'+
-    '<th>Price</th><th>Div Yield</th><th>PE</th><th>PBV</th><th>D/E</th>'+
-    '<th>ROE</th><th>Total Return</th><th>Saved</th><th></th>'+
+    '<th>Company</th>'+
+    '<th>Price</th><th>EPS</th><th>Div Yield</th><th>PE</th>'+
+    '<th>NAV</th><th>PBV</th><th>D/E</th>'+
+    '<th>ROE</th><th>EPS Gr.</th><th>Rev Gr.</th><th>Total Ret.</th>'+
+    '<th>Saved</th><th></th>'+
     '</tr></thead><tbody>'+rows+'</tbody></table></div>';
 
   document.getElementById('sel-all').addEventListener('change',function(){

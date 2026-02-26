@@ -454,7 +454,9 @@
 // Data is shared across ALL users and devices.
 var API = '/.netlify/functions/investments';
 
-var CATS = new Set([
+// ─── SECTOR NORMALISATION ──────────────────────────────────────────────────────
+// Canonical sector names as they appear in the UI dropdown.
+var CANONICAL_SECTORS = [
   "Application Software","Banking","Finance","Insurance",
   "Beverage, Food & Tobacco","Chemicals & Pharmaceuticals",
   "Commercial & Professional Services","Construction Engineering",
@@ -462,7 +464,38 @@ var CATS = new Set([
   "Information Technology","Investment Trusts","Land & Property",
   "Manufacturing","Motor","Oil Palms","Plantations","Power & Energy",
   "Services","Stores & Supplies","Telecommunications","Trading","Transportation"
-]);
+];
+
+// Normalize a string for comparison:
+//   - trim whitespace
+//   - collapse multiple spaces into one
+//   - normalize spacing around commas: "Beverage,Food" → "Beverage, Food"
+//   - lowercase for case-insensitive matching
+function normSector(s) {
+  if (!s) return '';
+  return s
+    .trim()
+    .replace(/\s+/g, ' ')                 // collapse multiple spaces
+    .replace(/\s*,\s*/g, ', ')            // normalise comma spacing → ", "
+    .toLowerCase();
+}
+
+// Build a map: normalised key → canonical display name
+// Used to resolve any CSV variant to the correct canonical name.
+var CATS_MAP = {};
+CANONICAL_SECTORS.forEach(function(name) {
+  CATS_MAP[normSector(name)] = name;
+});
+
+// Resolve a raw string from the CSV to a canonical sector name.
+// Returns the canonical name if matched, null otherwise.
+function resolvesector(raw) {
+  var key = normSector(raw);
+  if (CATS_MAP[key]) return CATS_MAP[key];
+  // Warn in console and return null so the row is skipped gracefully
+  console.warn('[CSE] Unknown sector in CSV: "' + raw + '" (normalised: "' + key + '") — row skipped.');
+  return null;
+}
 
 var allData = [], headers = [], currentCo = null, pageHist = ['upload'], records = [];
 
@@ -517,11 +550,25 @@ function processData(rows){
   var raw=rows[1].map(function(h){return h.trim();});
   raw[0]='Company'; if(!raw[1])raw[1]='Code'; headers=raw;
   var cat=null;
+  var unknownSectors=[];
   for(var i=2;i<rows.length;i++){
     var fc=(rows[i][0]||'').trim();
     if(!fc)continue;
-    if(CATS.has(fc)){cat=fc;}
-    else if(cat){allData.push({category:cat,rowData:rows[i].map(function(c){return c.trim();})});}
+    var resolved=resolvesector(fc);
+    if(resolved!==null){
+      cat=resolved; // always use the canonical name
+    } else if(fc) {
+      // fc is non-empty but didn't match — it might be a company row or truly unknown sector
+      if(cat){
+        allData.push({category:cat,rowData:rows[i].map(function(c){return c.trim();})});
+      } else {
+        // No sector established yet — could be an unknown sector header
+        if(unknownSectors.indexOf(fc)===-1){unknownSectors.push(fc);}
+      }
+    }
+  }
+  if(unknownSectors.length){
+    console.warn('[CSE] Unrecognised sector headers skipped:',unknownSectors);
   }
 }
 
@@ -545,7 +592,9 @@ function handleFile(file){
 
 // ─── SECTOR TABLE ──────────────────────────────────────────────────────────────
 function renderSector(cat){
-  var cos=allData.filter(function(d){return d.category===cat;});
+  // cat comes from the dropdown — canonical form. Match against allData using normalised comparison.
+  var normCat=normSector(cat);
+  var cos=allData.filter(function(d){return normSector(d.category)===normCat;});
   var vis=headers.map(function(h,i){if(!h||/^\d{4}$/.test(h))return null;return i;}).filter(function(i){return i!==null;});
   document.getElementById('table-head').innerHTML=
     vis.map(function(i){return '<th>'+headers[i]+'</th>';}).join('')+'<th style="text-align:right">Actions</th>';
@@ -577,7 +626,9 @@ function renderSector(cat){
 
 // ─── COMPANY HELPERS ───────────────────────────────────────────────────────────
 function buildCo(name,cat){
-  var item=allData.find(function(d){return d.rowData[0]===name&&d.category===cat;});
+  // Use normalised comparison so minor spacing differences don't break lookup
+  var normCat=normSector(cat);
+  var item=allData.find(function(d){return d.rowData[0]===name&&normSector(d.category)===normCat;});
   if(!item)return null;
   var meta=[],yrs={};
   headers.forEach(function(h,i){
@@ -586,7 +637,7 @@ function buildCo(name,cat){
     if(/^\d{4}$/.test(h))yrs[h]=v;
     else if(i>0&&v)meta.push({label:h,value:v});
   });
-  return{name:name,category:cat,rowData:item.rowData,yearData:yrs,metaFields:meta};
+  return{name:name,category:item.category,rowData:item.rowData,yearData:yrs,metaFields:meta};
 }
 
 function latestDiv(co){
@@ -735,8 +786,10 @@ function buildRecord(){
   var lf=cn(liab),qf=cn(eq),ld=latestDiv(currentCo);
   var dy=(pf>0&&ld!==null)?ld/pf*100:null;
   var code=currentCo.metaFields.find(function(f){return f.label==='Code';});
+  // Always store the canonical sector name (resolves any CSV variant)
+  var canonicalSector=resolvesector(currentCo.category)||currentCo.category;
   return{
-    name:currentCo.name,code:code?code.value:'',sector:currentCo.category,
+    name:currentCo.name,code:code?code.value:'',sector:canonicalSector,
     savedAt:new Date().toISOString(),
     price:price,eps:eps,nav:nav,roe:roe,epsg:epsg,revg:revg,liab:liab,eq:eq,
     divYield:dy!==null?dy.toFixed(2):null,
@@ -799,7 +852,8 @@ function openSavedPage(){
 
 function renderSaved(){
   var filter=document.getElementById('sector-filter').value;
-  var filtered=filter?records.filter(function(r){return r.sector===filter;}):records.slice();
+  var normFilter=normSector(filter);
+  var filtered=filter?records.filter(function(r){return normSector(r.sector)===normFilter;}):records.slice();
   document.getElementById('saved-sub').textContent=
     records.length+' record'+(records.length!==1?'s':'')+' · shared across all users & devices';
   document.getElementById('saved-count-txt').textContent='Showing '+filtered.length+' of '+records.length;
