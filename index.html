@@ -318,7 +318,7 @@
         <div class="input-group">
           <label>Dividend Yield</label>
           <div class="desc">Latest dividend ÷ Price × 100</div>
-          <input type="number" id="yield-display" class="result-na">Enter price above</input>
+          <div id="yield-display" class="result-na">Enter price above</div>
         </div>
 
         <div class="input-group">
@@ -364,13 +364,13 @@
         </div>
 
         <div class="input-group">
-          <label>EPS Growth</label>
+          <label>EPS Growth (%)</label>
           <div class="desc">Year-on-year EPS growth</div>
           <input type="number" id="input-epsg" placeholder="e.g. 8.2" step="0.01">
         </div>
 
         <div class="input-group">
-          <label>Revenue Growth</label>
+          <label>Revenue Growth (%)</label>
           <div class="desc">Year-on-year revenue growth</div>
           <input type="number" id="input-revg" placeholder="e.g. 12.0" step="0.01">
         </div>
@@ -448,14 +448,13 @@
 <footer>Data loaded from your CSV · Colombo Stock Exchange</footer>
 <div id="toast"></div>
 
+
 <script>
-// ─── STORAGE API ───────────────────────────────────────────────────────────────
-// Reads/writes go to /.netlify/functions/investments → Upstash Redis
-// Data is shared across ALL users and devices.
+// ─── CONFIG ────────────────────────────────────────────────────────────────────
 var API = '/.netlify/functions/investments';
+var SESSION_KEY = 'cse-csv-session';
 
 // ─── SECTOR NORMALISATION ──────────────────────────────────────────────────────
-// Canonical sector names as they appear in the UI dropdown.
 var CANONICAL_SECTORS = [
   "Application Software","Banking","Finance","Insurance",
   "Beverage, Food & Tobacco","Chemicals & Pharmaceuticals",
@@ -466,38 +465,53 @@ var CANONICAL_SECTORS = [
   "Services","Stores & Supplies","Telecommunications","Trading","Transportation"
 ];
 
-// Normalize a string for comparison:
-//   - trim whitespace
-//   - collapse multiple spaces into one
-//   - normalize spacing around commas: "Beverage,Food" → "Beverage, Food"
-//   - lowercase for case-insensitive matching
 function normSector(s) {
   if (!s) return '';
-  return s
-    .trim()
-    .replace(/\s+/g, ' ')                 // collapse multiple spaces
-    .replace(/\s*,\s*/g, ', ')            // normalise comma spacing → ", "
-    .toLowerCase();
+  return s.trim().replace(/\s+/g,' ').replace(/\s*,\s*/g,', ').toLowerCase();
 }
 
-// Build a map: normalised key → canonical display name
-// Used to resolve any CSV variant to the correct canonical name.
 var CATS_MAP = {};
-CANONICAL_SECTORS.forEach(function(name) {
-  CATS_MAP[normSector(name)] = name;
-});
+CANONICAL_SECTORS.forEach(function(n){ CATS_MAP[normSector(n)] = n; });
 
-// Resolve a raw string from the CSV to a canonical sector name.
-// Returns the canonical name if matched, null otherwise.
-function resolvesector(raw) {
+function resolveSector(raw) {
+  if (!raw) return null;
   var key = normSector(raw);
   if (CATS_MAP[key]) return CATS_MAP[key];
-  // Warn in console and return null so the row is skipped gracefully
-  console.warn('[CSE] Unknown sector in CSV: "' + raw + '" (normalised: "' + key + '") — row skipped.');
+  console.warn('[CSE] Unknown sector: "'+raw+'" (normalised: "'+key+'") — skipped.');
   return null;
 }
 
-var allData = [], headers = [], currentCo = null, pageHist = ['upload'], records = [];
+// ─── STATE ─────────────────────────────────────────────────────────────────────
+var allData   = [];
+var headers   = [];
+var currentCo = null;
+var pageHist  = ['upload'];
+var records   = [];
+var selForCmp = [];
+
+// ─── SAFE NUMBER PARSING ───────────────────────────────────────────────────────
+function safeNum(s) {
+  if (s === null || s === undefined || s === '') return NaN;
+  var n = parseFloat(String(s).replace(/[\s,]/g,''));
+  return isNaN(n) ? NaN : n;
+}
+
+// ─── DIVIDEND YIELD — DEFENSIVE LOGIC ─────────────────────────────────────────
+// Checks the latest 2 years. If both are null/empty/zero → returns 0.
+// Never returns null — caller can always compute yield safely.
+function getDivForYield(co) {
+  if (!co) return 0;
+  var yrs = Object.keys(co.yearData).sort(function(a,b){return b-a;});
+  var checked = 0;
+  for (var i = 0; i < yrs.length && checked < 2; i++) {
+    var v = co.yearData[yrs[i]];
+    if (v === undefined) continue;
+    checked++;
+    var n = safeNum(v);
+    if (!isNaN(n) && n > 0) return n;
+  }
+  return 0;
+}
 
 // ─── NAVIGATION ────────────────────────────────────────────────────────────────
 function showPage(id) {
@@ -509,271 +523,348 @@ function showPage(id) {
   var sub   = document.getElementById('header-subtitle');
   if (id==='upload'||id==='sector') {
     back.classList.remove('visible');
-    title.textContent='Sector Explorer'; sub.textContent='Browse listed companies by industry sector';
-  } else if (id==='invest'&&currentCo) {
+    title.textContent = 'Sector Explorer';
+    sub.textContent   = 'Browse listed companies by industry sector';
+  } else if (id==='invest' && currentCo) {
     back.classList.add('visible');
-    title.textContent=currentCo.name; sub.textContent=currentCo.category+' · Investment Calculator';
+    title.textContent = currentCo.name;
+    sub.textContent   = currentCo.category + ' · Investment Calculator';
   } else if (id==='saved') {
     back.classList.add('visible');
-    title.textContent='Saved Investments'; sub.textContent='Shared across all users & devices';
+    title.textContent = 'Saved Investments';
+    sub.textContent   = 'Shared across all users & devices';
   }
   window.scrollTo(0,0);
 }
 
 document.getElementById('back-btn').addEventListener('click', function(){
   pageHist.pop();
-  var prev=pageHist[pageHist.length-1]||'sector';
+  var prev = pageHist[pageHist.length-1] || 'sector';
   pageHist.pop();
   showPage(prev);
 });
 
-// ─── CSV ───────────────────────────────────────────────────────────────────────
+// ─── CSV PARSING ───────────────────────────────────────────────────────────────
 function parseCSV(txt) {
-  var lines=txt.split(/\r?\n/),res=[];
-  for(var i=0;i<lines.length;i++){
-    if(!lines[i].trim())continue;
-    var cols=[],cur='',inQ=false;
-    for(var j=0;j<lines[i].length;j++){
-      var c=lines[i][j];
-      if(c==='"'){inQ=!inQ;continue;}
-      if(c===','&&!inQ){cols.push(cur.trim());cur='';continue;}
-      cur+=c;
+  var lines = txt.split(/\r?\n/), res = [];
+  for (var i=0; i<lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    var cols=[], cur='', inQ=false;
+    for (var j=0; j<lines[i].length; j++) {
+      var c = lines[i][j];
+      if (c==='"') { inQ=!inQ; continue; }
+      if (c===','&&!inQ) { cols.push(cur.trim()); cur=''; continue; }
+      cur += c;
     }
-    cols.push(cur.trim()); res.push(cols);
+    cols.push(cur.trim());
+    res.push(cols);
   }
   return res;
 }
 
-function processData(rows){
-  allData=[];headers=[];
-  if(rows.length<2)return;
-  var raw=rows[1].map(function(h){return h.trim();});
-  raw[0]='Company'; if(!raw[1])raw[1]='Code'; headers=raw;
-  var cat=null;
-  var unknownSectors=[];
-  for(var i=2;i<rows.length;i++){
-    var fc=(rows[i][0]||'').trim();
-    if(!fc)continue;
-    var resolved=resolvesector(fc);
-    if(resolved!==null){
-      cat=resolved; // always use the canonical name
-    } else if(fc) {
-      // fc is non-empty but didn't match — it might be a company row or truly unknown sector
-      if(cat){
-        allData.push({category:cat,rowData:rows[i].map(function(c){return c.trim();})});
-      } else {
-        // No sector established yet — could be an unknown sector header
-        if(unknownSectors.indexOf(fc)===-1){unknownSectors.push(fc);}
-      }
+function processData(rows) {
+  allData=[]; headers=[];
+  if (rows.length < 2) return;
+  var raw = rows[1].map(function(h){ return h.trim(); });
+  raw[0]='Company'; if (!raw[1]) raw[1]='Code';
+  headers = raw;
+  var cat = null, unknown = [];
+  for (var i=2; i<rows.length; i++) {
+    var fc = (rows[i][0]||'').trim();
+    if (!fc) continue;
+    var resolved = resolveSector(fc);
+    if (resolved !== null) {
+      cat = resolved;
+    } else if (cat) {
+      allData.push({ category:cat, rowData:rows[i].map(function(c){ return c.trim(); }) });
+    } else {
+      if (unknown.indexOf(fc)===-1) unknown.push(fc);
     }
   }
-  if(unknownSectors.length){
-    console.warn('[CSE] Unrecognised sector headers skipped:',unknownSectors);
-  }
+  if (unknown.length) console.warn('[CSE] Unrecognised sector headers skipped:', unknown);
 }
 
-function handleFile(file){
-  if(!file)return;
-  if(!file.name.endsWith('.csv')){toast('Please upload a .csv file');return;}
-  var r=new FileReader();
-  r.onload=function(e){
-    var rows=parseCSV(e.target.result);
-    processData(rows);
-    if(!allData.length){toast('No matching data found');return;}
-    document.getElementById('file-name-badge').textContent=file.name;
+// ─── SESSION STORAGE FOR CSV ───────────────────────────────────────────────────
+function saveCSVToSession(fileName) {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+      fileName: fileName, headers: headers, allData: allData
+    }));
+  } catch(e) { console.warn('[CSE] sessionStorage write failed:', e); }
+}
+
+function loadCSVFromSession() {
+  try {
+    var raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return false;
+    var d = JSON.parse(raw);
+    if (!d || !d.headers || !d.allData) return false;
+    headers = d.headers;
+    allData = d.allData;
+    document.getElementById('file-name-badge').textContent = d.fileName || '(session)';
     document.getElementById('file-badge').classList.add('visible');
-    document.getElementById('category-select').value='';
-    document.getElementById('results').style.display='none';
+    return true;
+  } catch(e) { return false; }
+}
+
+function handleFile(file) {
+  if (!file) return;
+  if (!file.name.endsWith('.csv')) { toast('Please upload a .csv file'); return; }
+  var r = new FileReader();
+  r.onload = function(e) {
+    var rows = parseCSV(e.target.result);
+    processData(rows);
+    if (!allData.length) { toast('No matching data found'); return; }
+    saveCSVToSession(file.name);
+    document.getElementById('file-name-badge').textContent = file.name;
+    document.getElementById('file-badge').classList.add('visible');
+    document.getElementById('category-select').value = '';
+    document.getElementById('results').style.display = 'none';
     showPage('sector');
-    toast('Loaded '+allData.length+' companies');
+    toast('Loaded ' + allData.length + ' companies');
   };
   r.readAsText(file);
 }
 
 // ─── SECTOR TABLE ──────────────────────────────────────────────────────────────
-function renderSector(cat){
-  // cat comes from the dropdown — canonical form. Match against allData using normalised comparison.
-  var normCat=normSector(cat);
-  var cos=allData.filter(function(d){return normSector(d.category)===normCat;});
-  var vis=headers.map(function(h,i){if(!h||/^\d{4}$/.test(h))return null;return i;}).filter(function(i){return i!==null;});
-  document.getElementById('table-head').innerHTML=
-    vis.map(function(i){return '<th>'+headers[i]+'</th>';}).join('')+'<th style="text-align:right">Actions</th>';
-  if(!cos.length){
-    document.getElementById('table-body').innerHTML='<tr><td colspan="'+(vis.length+1)+'" style="text-align:center;padding:2rem;color:var(--muted)">No companies found.</td></tr>';
+function renderSector(cat) {
+  var normCat = normSector(cat);
+  var cos = allData.filter(function(d){ return normSector(d.category)===normCat; });
+  var vis = headers.map(function(h,i){
+    if (!h || /^\d{4}$/.test(h)) return null; return i;
+  }).filter(function(i){ return i!==null; });
+
+  document.getElementById('table-head').innerHTML =
+    vis.map(function(i){ return '<th>'+headers[i]+'</th>'; }).join('') +
+    '<th style="text-align:right">Actions</th>';
+
+  if (!cos.length) {
+    document.getElementById('table-body').innerHTML =
+      '<tr><td colspan="'+(vis.length+1)+'" style="text-align:center;padding:2rem;color:var(--muted)">No companies found.</td></tr>';
   } else {
-    document.getElementById('table-body').innerHTML=cos.map(function(item){
-      var cells=vis.map(function(i){
-        var v=item.rowData[i]||'';
-        return i===0?'<td class="company-name">'+v+'</td>':'<td>'+(v||'<span style="color:var(--border)">-</span>')+'</td>';
+    document.getElementById('table-body').innerHTML = cos.map(function(item){
+      var cells = vis.map(function(i){
+        var v = item.rowData[i]||'';
+        return i===0 ? '<td class="company-name">'+v+'</td>' :
+          '<td>'+(v||'<span style="color:var(--border)">-</span>')+'</td>';
       }).join('');
-      var enc=encodeURIComponent(item.rowData[0]||''),encC=encodeURIComponent(cat);
-      return '<tr>'+cells+'<td style="text-align:right"><button class="ri-btn" data-c="'+enc+'" data-cat="'+encC+'" '+
-        'style="background:var(--gold);color:var(--ink);border:none;padding:0.3rem 0.75rem;border-radius:5px;'+
+      var enc=encodeURIComponent(item.rowData[0]||''), encC=encodeURIComponent(cat);
+      return '<tr>'+cells+
+        '<td style="text-align:right"><button class="ri-btn" data-c="'+enc+'" data-cat="'+encC+'"'+
+        ' style="background:var(--gold);color:var(--ink);border:none;padding:0.3rem 0.75rem;border-radius:5px;'+
         'font-family:DM Sans,sans-serif;font-size:0.75rem;font-weight:600;cursor:pointer;">Investment</button></td></tr>';
     }).join('');
     document.querySelectorAll('.ri-btn').forEach(function(btn){
-      btn.addEventListener('click',function(e){
+      btn.addEventListener('click', function(e){
         e.stopPropagation();
-        var co=buildCo(decodeURIComponent(this.dataset.c),decodeURIComponent(this.dataset.cat));
-        if(co){currentCo=co;openInvest();}
+        var co = buildCo(decodeURIComponent(this.dataset.c), decodeURIComponent(this.dataset.cat));
+        if (co) { currentCo=co; openInvest(); }
       });
     });
   }
-  document.getElementById('results-title').textContent=cat;
-  document.getElementById('results-count').textContent=cos.length+' '+(cos.length===1?'company':'companies');
-  document.getElementById('results').style.display='block';
+  document.getElementById('results-title').textContent = cat;
+  document.getElementById('results-count').textContent = cos.length+' '+(cos.length===1?'company':'companies');
+  document.getElementById('results').style.display = 'block';
 }
 
 // ─── COMPANY HELPERS ───────────────────────────────────────────────────────────
-function buildCo(name,cat){
-  // Use normalised comparison so minor spacing differences don't break lookup
-  var normCat=normSector(cat);
-  var item=allData.find(function(d){return d.rowData[0]===name&&normSector(d.category)===normCat;});
-  if(!item)return null;
-  var meta=[],yrs={};
-  headers.forEach(function(h,i){
-    if(!h)return;
-    var v=item.rowData[i]||'';
-    if(/^\d{4}$/.test(h))yrs[h]=v;
-    else if(i>0&&v)meta.push({label:h,value:v});
+function buildCo(name, cat) {
+  var normCat = normSector(cat);
+  var item = allData.find(function(d){
+    return d.rowData[0]===name && normSector(d.category)===normCat;
   });
-  return{name:name,category:item.category,rowData:item.rowData,yearData:yrs,metaFields:meta};
-}
-
-function latestDiv(co){
-  if(!co)return null;
-  var yrs=Object.keys(co.yearData).sort(function(a,b){return b-a;});
-  for(var i=0;i<yrs.length;i++){var p=parseFloat(co.yearData[yrs[i]]);if(!isNaN(p)&&p>0)return p;}
-  return null;
+  if (!item) return null;
+  var meta=[], yrs={};
+  headers.forEach(function(h,i){
+    if (!h) return;
+    var v = item.rowData[i]||'';
+    if (/^\d{4}$/.test(h)) yrs[h]=v;
+    else if (i>0&&v) meta.push({label:h, value:v});
+  });
+  return { name:name, category:item.category, rowData:item.rowData, yearData:yrs, metaFields:meta };
 }
 
 // ─── INVEST PAGE ───────────────────────────────────────────────────────────────
-function openInvest(){
-  if(!currentCo)return;
-  var co=currentCo;
-  document.getElementById('invest-company-name').textContent=co.name;
-  var code=co.metaFields.find(function(f){return f.label==='Code';});
-  document.getElementById('invest-company-sub').textContent=(code?code.value+' · ':'')+co.category;
+function openInvest() {
+  if (!currentCo) return;
+  var co = currentCo;
+  document.getElementById('invest-company-name').textContent = co.name;
+  var code = co.metaFields.find(function(f){ return f.label==='Code'; });
+  document.getElementById('invest-company-sub').textContent = (code?code.value+' · ':'')+co.category;
 
-  var allYrs=Object.keys(co.yearData).sort(function(a,b){return b-a;});
-  var latY=allYrs.find(function(y){var v=parseFloat(co.yearData[y]);return !isNaN(v)&&v>0;});
-  var last10=allYrs.slice(0,10);
-  document.getElementById('summary-head').innerHTML=
-    '<th style="text-align:left;padding-left:1rem">Metric</th>'+
-    last10.map(function(y){var l=y===latY;return '<th class="'+(l?'latest-col':'')+'">'+y+(l?' ★':'')+'</th>';}).join('');
-  document.getElementById('summary-row').innerHTML=
-    '<td style="padding-left:1rem;font-size:0.78rem;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:0.05em">Dividend</td>'+
+  // Dividend history table
+  var allYrs = Object.keys(co.yearData).sort(function(a,b){ return b-a; });
+  var latY = allYrs.find(function(y){
+    var v=safeNum(co.yearData[y]); return !isNaN(v)&&v>0;
+  });
+  var last10 = allYrs.slice(0,10);
+  document.getElementById('summary-head').innerHTML =
+    '<th style="text-align:left;padding-left:1rem">Metric</th>' +
     last10.map(function(y){
-      var v=co.yearData[y],l=y===latY,cl=l?'latest-col':'';
-      return(v&&parseFloat(v)>0)?'<td class="'+cl+'"><span class="div-val">'+v+'</span></td>':'<td class="'+cl+'"><span class="div-empty">-</span></td>';
+      var l=y===latY;
+      return '<th class="'+(l?'latest-col':'')+'">'+y+(l?' ★':'')+'</th>';
+    }).join('');
+  document.getElementById('summary-row').innerHTML =
+    '<td style="padding-left:1rem;font-size:0.78rem;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:0.05em">Dividend</td>' +
+    last10.map(function(y){
+      var v=co.yearData[y], l=y===latY, cl=l?'latest-col':'';
+      var n=safeNum(v);
+      return (!isNaN(n)&&n>0) ?
+        '<td class="'+cl+'"><span class="div-val">'+v+'</span></td>' :
+        '<td class="'+cl+'"><span class="div-empty">-</span></td>';
     }).join('');
 
   // Pre-fill from saved record if exists
-  var saved=records.find(function(r){return r.name===co.name;});
-  if(saved){
-    document.getElementById('input-price').value=saved.price||'';
-    document.getElementById('input-eps').value  =saved.eps||'';
-    document.getElementById('input-nav').value  =saved.nav||'';
-    document.getElementById('input-liab').value =saved.liab||'';
-    document.getElementById('input-eq').value   =saved.eq||'';
-    document.getElementById('input-roe').value  =saved.roe||'';
-    document.getElementById('input-epsg').value =saved.epsg||'';
-    document.getElementById('input-revg').value =saved.revg||'';
+  var saved = records.find(function(r){ return r.name===co.name; });
+  if (saved) {
+    document.getElementById('input-price').value = saved.price||'';
+    document.getElementById('input-eps').value   = saved.eps||'';
+    document.getElementById('input-nav').value   = saved.nav||'';
+    document.getElementById('input-liab').value  = saved.liab||'';
+    document.getElementById('input-eq').value    = saved.eq||'';
+    document.getElementById('input-roe').value   = saved.roe||'';
+    document.getElementById('input-epsg').value  = saved.epsg||'';
+    document.getElementById('input-revg').value  = saved.revg||'';
   } else {
     ['input-price','input-eps','input-nav','input-liab','input-eq','input-roe','input-epsg','input-revg']
-      .forEach(function(id){document.getElementById(id).value='';});
+      .forEach(function(id){ document.getElementById(id).value=''; });
   }
 
-  // Reset calc displays
-  ['yield-display','pe-display','pbv-display','total-display'].forEach(function(id){
-    document.getElementById(id).className='result-na';
-  });
-  document.getElementById('yield-display').textContent='Enter price above';
-  document.getElementById('pe-display').textContent='Enter price & EPS';
-  document.getElementById('pbv-display').textContent='Enter price & NAV';
-  document.getElementById('total-display').textContent='Enter price & ROE';
-  var de=document.getElementById('de-display');
-  de.textContent='—';de.style.background='var(--cream)';de.style.borderColor='var(--border)';de.style.color='var(--muted)';
-  document.getElementById('price-status').innerHTML='';
-
+  resetCalcDisplays();
+  document.getElementById('price-status').innerHTML = '';
   showPage('invest');
-  if(saved)recalc();
+  if (saved) recalc();
+}
+
+function resetCalcDisplays() {
+  ['yield-display','pe-display','pbv-display','total-display'].forEach(function(id){
+    document.getElementById(id).className = 'result-na';
+  });
+  document.getElementById('yield-display').textContent  = 'Enter price above';
+  document.getElementById('pe-display').textContent     = 'Enter price & EPS';
+  document.getElementById('pbv-display').textContent    = 'Enter price & NAV';
+  document.getElementById('total-display').textContent  = 'Enter price & ROE';
+  var de = document.getElementById('de-display');
+  de.textContent='—'; de.style.background='var(--cream)'; de.style.borderColor='var(--border)'; de.style.color='var(--muted)';
 }
 
 // ─── LIVE PRICE ────────────────────────────────────────────────────────────────
-function fetchLive(){
-  if(!currentCo)return;
-  var cf=currentCo.metaFields.find(function(f){return f.label==='Code';});
-  var code=cf?cf.value.trim():null;
-  if(!code){setStatus('No stock code found',true);return;}
-  var sym=code+'.N0000';
-  var btn=document.getElementById('fetch-price-btn');
-  btn.disabled=true;btn.textContent='...';
-  document.getElementById('price-status').textContent='Fetching from CSE…';
+function fetchLive() {
+  if (!currentCo) return;
+  var cf = currentCo.metaFields.find(function(f){ return f.label==='Code'; });
+  var code = cf ? cf.value.trim() : null;
+  if (!code) { setStatus('No stock code found', true); return; }
+  var sym = code+'.N0000';
+  var btn = document.getElementById('fetch-price-btn');
+  btn.disabled=true; btn.textContent='...';
+  document.getElementById('price-status').textContent = 'Fetching from CSE…';
+
   fetch('/.netlify/functions/cse-price?symbol='+encodeURIComponent(sym))
-  .then(function(r){return r.json();})
-  .then(function(d){
-    btn.disabled=false;btn.innerHTML='↻ Live';
-    if(d&&d.reqSymbolInfo&&d.reqSymbolInfo.lastTradedPrice){
-      var p=d.reqSymbolInfo.lastTradedPrice,ch=d.reqSymbolInfo.change||0,pct=d.reqSymbolInfo.changePercentage||0;
-      document.getElementById('input-price').value=p;
-      var s=ch>=0?'+':'';
-      document.getElementById('price-status').innerHTML='<span class="price-live-badge">✓ LKR '+p+' ('+s+ch.toFixed(2)+' / '+s+pct.toFixed(2)+'%)</span>';
-      recalc();
-    } else {setStatus('Not found as '+sym+' — enter manually',true);}
+  .then(function(r) {
+    if (r.status===404) throw new Error('ENDPOINT_404');
+    if (!r.ok)          throw new Error('HTTP_'+r.status);
+    return r.json();
   })
-  .catch(function(){btn.disabled=false;btn.innerHTML='↻ Live';setStatus('Could not reach CSE — enter manually',true);});
+  .then(function(d) {
+    btn.disabled=false; btn.innerHTML='↻ Live';
+    if (d && d.reqSymbolInfo && d.reqSymbolInfo.lastTradedPrice) {
+      var p=d.reqSymbolInfo.lastTradedPrice;
+      var ch=d.reqSymbolInfo.change||0, pct=d.reqSymbolInfo.changePercentage||0;
+      document.getElementById('input-price').value = p;
+      var s = ch>=0?'+':'';
+      document.getElementById('price-status').innerHTML =
+        '<span class="price-live-badge">✓ LKR '+p+' ('+s+ch.toFixed(2)+' / '+s+pct.toFixed(2)+'%)</span>';
+      recalc();
+    } else {
+      // Symbol not found upstream — price field unchanged, calculations unaffected
+      setStatus('Symbol '+sym+' not found on CSE — enter price manually', true);
+    }
+  })
+  .catch(function(err) {
+    btn.disabled=false; btn.innerHTML='↻ Live';
+    var msg = err && err.message;
+    if (msg==='ENDPOINT_404') {
+      setStatus('Live price unavailable — enter price manually', true);
+      console.error('[CSE] cse-price function returned 404. Check Netlify Functions tab — function may not be deployed.');
+    } else if (msg && msg.indexOf('HTTP_')===0) {
+      setStatus('CSE server error ('+msg+') — enter price manually', true);
+    } else {
+      setStatus('Network error — enter price manually', true);
+    }
+    // Price field is untouched — existing value and calculations are preserved
+  });
 }
-function setStatus(m,e){var el=document.getElementById('price-status');el.textContent=m;el.className=e?'price-live-badge error':'';}
+
+function setStatus(m, e) {
+  var el = document.getElementById('price-status');
+  el.textContent = m;
+  el.className = e ? 'price-live-badge error' : '';
+}
 
 // ─── CALCULATIONS ──────────────────────────────────────────────────────────────
-function cn(s){return parseFloat((s||'').replace(/[\s,]/g,''));}
+function recalc() {
+  if (!currentCo) return;
+  var price = safeNum(document.getElementById('input-price').value);
+  var eps   = safeNum(document.getElementById('input-eps').value);
+  var nav   = safeNum(document.getElementById('input-nav').value);
+  var roe   = safeNum(document.getElementById('input-roe').value);
 
-function recalc(){
-  if(!currentCo)return;
-  var price=parseFloat(document.getElementById('input-price').value);
-  var eps  =parseFloat(document.getElementById('input-eps').value);
-  var nav  =parseFloat(document.getElementById('input-nav').value);
-  var roe  =parseFloat(document.getElementById('input-roe').value);
-  var ld   =latestDiv(currentCo);
+  // Dividend Yield — always computable when price > 0 (divAmt is 0 when no data)
+  var yEl=document.getElementById('yield-display'), dy=null;
+  if (!isNaN(price) && price > 0) {
+    var divAmt = getDivForYield(currentCo);
+    dy = divAmt / price * 100;
+    yEl.className = 'result-highlight';
+    yEl.textContent = dy.toFixed(2)+'%';
+  } else {
+    yEl.className = 'result-na';
+    yEl.textContent = 'Enter price above';
+  }
 
-  // Yield
-  var yEl=document.getElementById('yield-display'),dy=null;
-  if(price>0&&ld!==null){dy=ld/price*100;yEl.className='result-highlight';yEl.textContent=dy.toFixed(2)+'%';}
-  else{yEl.className='result-na';yEl.textContent=price>0?'No dividend data':'Enter price above';}
-
-  // PE
-  var peEl=document.getElementById('pe-display');
-  if(price>0&&eps>0){var pe=price/eps;peEl.className=pe<7?'result-highlight':pe<=8?'result-highlight-orange':'result-highlight-red';peEl.textContent=pe.toFixed(3);}
-  else{peEl.className='result-na';peEl.textContent='Enter price & EPS';}
+  // PE Ratio
+  var peEl = document.getElementById('pe-display');
+  if (!isNaN(price)&&price>0&&!isNaN(eps)&&eps>0) {
+    var pe = price/eps;
+    peEl.className = pe<7?'result-highlight':pe<=8?'result-highlight-orange':'result-highlight-red';
+    peEl.textContent = pe.toFixed(3);
+  } else { peEl.className='result-na'; peEl.textContent='Enter price & EPS'; }
 
   // PBV
-  var pbvEl=document.getElementById('pbv-display');
-  if(price>0&&nav>0){var pbv=price/nav;pbvEl.className=pbv<=1?'result-highlight':'result-highlight-orange';pbvEl.textContent=pbv.toFixed(3);}
-  else{pbvEl.className='result-na';pbvEl.textContent='Enter price & NAV';}
+  var pbvEl = document.getElementById('pbv-display');
+  if (!isNaN(price)&&price>0&&!isNaN(nav)&&nav>0) {
+    var pbv = price/nav;
+    pbvEl.className = pbv<=1?'result-highlight':'result-highlight-orange';
+    pbvEl.textContent = pbv.toFixed(3);
+  } else { pbvEl.className='result-na'; pbvEl.textContent='Enter price & NAV'; }
 
   // D/E
-  var deEl=document.getElementById('de-display');
-  var li=cn(document.getElementById('input-liab').value),eq=cn(document.getElementById('input-eq').value);
-  if(!isNaN(li)&&!isNaN(eq)&&eq!==0){
-    var de=li/eq;deEl.textContent=de.toFixed(2);
-    if(de<=1){deEl.style.background='var(--green-bg)';deEl.style.borderColor='#a8d5be';deEl.style.color='var(--green)';}
-    else{deEl.style.background='#fff4e5';deEl.style.borderColor='#f0a030';deEl.style.color='#c07010';}
-  } else {deEl.textContent='—';deEl.style.background='var(--cream)';deEl.style.borderColor='var(--border)';deEl.style.color='var(--muted)';}
+  var deEl = document.getElementById('de-display');
+  var li = safeNum(document.getElementById('input-liab').value);
+  var eq = safeNum(document.getElementById('input-eq').value);
+  if (!isNaN(li)&&!isNaN(eq)&&eq!==0) {
+    var de = li/eq;
+    deEl.textContent = de.toFixed(2);
+    if (de<=1) { deEl.style.background='var(--green-bg)'; deEl.style.borderColor='#a8d5be'; deEl.style.color='var(--green)'; }
+    else       { deEl.style.background='#fff4e5'; deEl.style.borderColor='#f0a030'; deEl.style.color='#c07010'; }
+  } else {
+    deEl.textContent='—'; deEl.style.background='var(--cream)'; deEl.style.borderColor='var(--border)'; deEl.style.color='var(--muted)';
+  }
 
-  // Total Return
-  var tEl=document.getElementById('total-display');
-  if(dy!==null&&!isNaN(roe)){tEl.className='result-highlight';tEl.textContent=(dy+roe).toFixed(2)+'%';}
-  else{tEl.className='result-na';tEl.textContent='Enter price & ROE';}
+  // Total Return = Div Yield + ROE
+  var tEl = document.getElementById('total-display');
+  if (dy!==null && !isNaN(roe)) {
+    tEl.className = 'result-highlight';
+    tEl.textContent = (dy+roe).toFixed(2)+'%';
+  } else { tEl.className='result-na'; tEl.textContent='Enter price & ROE'; }
 }
 
 ['input-price','input-eps','input-nav','input-roe','input-liab','input-eq'].forEach(function(id){
-  document.getElementById(id).addEventListener('input',recalc);
+  document.getElementById(id).addEventListener('input', recalc);
 });
 
 // ─── SAVE ──────────────────────────────────────────────────────────────────────
-function buildRecord(){
-  if(!currentCo)return null;
+function buildRecord() {
+  if (!currentCo) return null;
   var price=document.getElementById('input-price').value;
   var eps  =document.getElementById('input-eps').value;
   var nav  =document.getElementById('input-nav').value;
@@ -782,109 +873,175 @@ function buildRecord(){
   var revg =document.getElementById('input-revg').value;
   var liab =document.getElementById('input-liab').value;
   var eq   =document.getElementById('input-eq').value;
-  var pf=parseFloat(price),ef=parseFloat(eps),nf=parseFloat(nav),rf=parseFloat(roe);
-  var lf=cn(liab),qf=cn(eq),ld=latestDiv(currentCo);
-  var dy=(pf>0&&ld!==null)?ld/pf*100:null;
-  var code=currentCo.metaFields.find(function(f){return f.label==='Code';});
-  // Always store the canonical sector name (resolves any CSV variant)
-  var canonicalSector=resolvesector(currentCo.category)||currentCo.category;
-  return{
-    name:currentCo.name,code:code?code.value:'',sector:canonicalSector,
-    savedAt:new Date().toISOString(),
-    price:price,eps:eps,nav:nav,roe:roe,epsg:epsg,revg:revg,liab:liab,eq:eq,
-    divYield:dy!==null?dy.toFixed(2):null,
-    pe:(pf>0&&ef>0)?(pf/ef).toFixed(3):null,
-    pbv:(pf>0&&nf>0)?(pf/nf).toFixed(3):null,
-    de:(!isNaN(lf)&&!isNaN(qf)&&qf!==0)?(lf/qf).toFixed(2):null,
-    totalReturn:(dy!==null&&!isNaN(rf))?(dy+rf).toFixed(2):null
+
+  var pf=safeNum(price), ef=safeNum(eps), nf=safeNum(nav), rf=safeNum(roe);
+  var lf=safeNum(liab),  qf=safeNum(eq);
+  var divAmt = getDivForYield(currentCo);
+  var dy = (!isNaN(pf)&&pf>0) ? (divAmt/pf*100) : null;
+
+  var code = currentCo.metaFields.find(function(f){ return f.label==='Code'; });
+  var canonicalSector = resolveSector(currentCo.category) || currentCo.category;
+
+  return {
+    name:    currentCo.name,
+    code:    code ? code.value : '',
+    sector:  canonicalSector,
+    savedAt: new Date().toISOString(),
+    // Raw inputs
+    price:price, eps:eps, nav:nav, roe:roe, epsg:epsg, revg:revg, liab:liab, eq:eq,
+    // Computed derived values
+    divYield:    dy!==null                              ? dy.toFixed(2)          : null,
+    pe:          (!isNaN(pf)&&pf>0&&!isNaN(ef)&&ef>0) ? (pf/ef).toFixed(3)    : null,
+    pbv:         (!isNaN(pf)&&pf>0&&!isNaN(nf)&&nf>0) ? (pf/nf).toFixed(3)    : null,
+    de:          (!isNaN(lf)&&!isNaN(qf)&&qf!==0)     ? (lf/qf).toFixed(2)    : null,
+    totalReturn: (dy!==null&&!isNaN(rf))               ? (dy+rf).toFixed(2)    : null
   };
 }
 
-document.getElementById('save-btn').addEventListener('click',function(){
-  if(!currentCo)return;
-  var rec=buildRecord();if(!rec)return;
-  var exists=records.find(function(r){return r.name===rec.name;});
-  if(exists){
-    confirm2('Company already saved','"'+rec.name+'" already has a saved record. Overwrite with current values?',function(){doSave(rec,true);});
-  } else {doSave(rec,false);}
+document.getElementById('save-btn').addEventListener('click', function(){
+  if (!currentCo) return;
+  var rec = buildRecord(); if (!rec) return;
+  var exists = records.find(function(r){ return r.name===rec.name; });
+  if (exists) {
+    confirm2(
+      'Company already saved',
+      '"'+rec.name+'" already has a saved record. Overwrite with current values?',
+      function(){ doSave(rec, true); }
+    );
+  } else {
+    doSave(rec, false);
+  }
 });
 
-function doSave(rec,overwrite){
-  var btn=document.getElementById('save-btn');
-  btn.disabled=true;btn.textContent='Saving…';
-  var rollback=records.slice();
-  if(overwrite){records=records.map(function(r){return r.name===rec.name?rec:r;});}
-  else{records.push(rec);}
+function doSave(rec, overwrite) {
+  var btn = document.getElementById('save-btn');
+  btn.disabled=true; btn.textContent='Saving…';
+  var rollback = records.slice();
+  if (overwrite) {
+    records = records.map(function(r){ return r.name===rec.name ? rec : r; });
+  } else {
+    records.push(rec);
+  }
   persist(function(ok){
-    btn.disabled=false;btn.innerHTML='&#128190; Save';
-    if(ok){updateBadge();toast(overwrite?'Record updated ✓':'Saved ✓');}
-    else{records=rollback;toast('Save failed — please try again');}
+    btn.disabled=false; btn.innerHTML='&#128190; Save';
+    if (ok) {
+      updateBadge();
+      toast(overwrite ? 'Record updated ✓' : 'Saved ✓');
+    } else {
+      records = rollback;
+      toast('Save failed — please try again');
+    }
   });
 }
 
 // ─── UPSTASH STORAGE ───────────────────────────────────────────────────────────
-function persist(cb){
-  fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(records)})
-  .then(function(r){return r.json();}).then(function(d){cb(d.ok===true);}).catch(function(){cb(false);});
+function persist(cb) {
+  fetch(API, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(records)
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){ cb(d.ok===true); })
+  .catch(function(){ cb(false); });
 }
 
-function loadRecords(cb){
-  fetch(API).then(function(r){return r.json();})
-  .then(function(d){records=(d.ok&&Array.isArray(d.data))?d.data:[];updateBadge();if(cb)cb();})
-  .catch(function(){records=[];updateBadge();if(cb)cb();});
+function loadRecords(cb) {
+  fetch(API)
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    records = (d.ok && Array.isArray(d.data)) ? d.data : [];
+    updateBadge();
+    if (cb) cb();
+  })
+  .catch(function(){
+    records = [];
+    updateBadge();
+    if (cb) cb();
+  });
 }
 
-function updateBadge(){
-  var b=document.getElementById('saved-badge');
-  b.textContent=records.length;
-  b.style.display=records.length>0?'inline':'none';
+function updateBadge() {
+  var b = document.getElementById('saved-badge');
+  b.textContent = records.length;
+  b.style.display = records.length > 0 ? 'inline' : 'none';
 }
 
 // ─── SAVED PAGE ────────────────────────────────────────────────────────────────
-var selForCmp=[];
-
-function openSavedPage(){
-  selForCmp=[];
-  document.getElementById('saved-content').innerHTML='<div class="loading-msg">Loading saved records…</div>';
+function openSavedPage() {
+  selForCmp = [];
+  document.getElementById('saved-content').innerHTML = '<div class="loading-msg">Loading saved records…</div>';
   showPage('saved');
-  loadRecords(function(){renderSaved();});
+  loadRecords(function(){ renderSaved(); });
 }
 
-function renderSaved(){
-  var filter=document.getElementById('sector-filter').value;
-  var normFilter=normSector(filter);
-  var filtered=filter?records.filter(function(r){return normSector(r.sector)===normFilter;}):records.slice();
-  document.getElementById('saved-sub').textContent=
-    records.length+' record'+(records.length!==1?'s':'')+' · shared across all users & devices';
-  document.getElementById('saved-count-txt').textContent='Showing '+filtered.length+' of '+records.length;
-  var el=document.getElementById('saved-content');
+function refreshSaved() {
+  selForCmp = [];
+  document.getElementById('saved-content').innerHTML = '<div class="loading-msg">Refreshing…</div>';
+  loadRecords(function(){ renderSaved(); toast('Data refreshed'); });
+}
 
-  if(!filtered.length){
-    el.innerHTML='<div class="empty-state"><div class="empty-icon">📊</div>'+
+function renderSaved() {
+  var filter = document.getElementById('sector-filter').value;
+  var normFilter = normSector(filter);
+  var filtered = filter
+    ? records.filter(function(r){ return normSector(r.sector)===normFilter; })
+    : records.slice();
+
+  document.getElementById('saved-sub').textContent =
+    records.length+' record'+(records.length!==1?'s':'')+' · shared across all users & devices';
+  document.getElementById('saved-count-txt').textContent =
+    'Showing '+filtered.length+' of '+records.length;
+
+  var el = document.getElementById('saved-content');
+
+  if (!filtered.length) {
+    el.innerHTML = '<div class="empty-state">'+
+      '<div class="empty-icon">📊</div>'+
       '<h3>'+(filter?'No records in this sector':'No saved investments yet')+'</h3>'+
-      '<p>'+(filter?'Try a different sector.':'Open a company\'s Investment page and press Save.')+'</p></div>';
-    updateCmpBtn();return;
+      '<p>'+(filter?'Try a different sector.':'Open a company\'s Investment page and press Save.')+'</p>'+
+      '</div>';
+    updateCmpBtn(); return;
   }
 
-  var rows=filtered.map(function(r){
-    var sel=selForCmp.indexOf(r.name)!==-1;
-    var deCl=r.de?(parseFloat(r.de)<=1?'vg':'vo'):'';
-    var pbCl=r.pbv?(parseFloat(r.pbv)<=1?'vg':'vo'):'';
-    var peCl=r.pe?(parseFloat(r.pe)<7?'vg':parseFloat(r.pe)<=8?'vo':'vr'):'';
-    var dt=r.savedAt?new Date(r.savedAt).toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).replace(',',''):'—';
-    function c(v,sfx,cl){return(v!==null&&v!==undefined&&v!=='')?'<td class="'+(cl||'')+'">'+v+(sfx||'')+'</td>':'<td class="vna">—</td>';}
-    return'<tr>'+
-      '<td class="sel-col"><input type="checkbox" class="ccb" data-n="'+encodeURIComponent(r.name)+'"'+(sel?' checked':'')+' ></td>'+
+  var rows = filtered.map(function(r){
+    var sel = selForCmp.indexOf(r.name) !== -1;
+    var deCl = r.de  ? (parseFloat(r.de) <=1?'vg':'vo') : '';
+    var pbCl = r.pbv ? (parseFloat(r.pbv)<=1?'vg':'vo') : '';
+    var peCl = r.pe  ? (parseFloat(r.pe) < 7?'vg':parseFloat(r.pe)<=8?'vo':'vr') : '';
+    var dt = r.savedAt
+      ? new Date(r.savedAt).toLocaleDateString('en-GB',{
+          day:'2-digit',month:'2-digit',year:'2-digit',
+          hour:'2-digit',minute:'2-digit',hour12:false
+        }).replace(',','')
+      : '—';
+    function c(v,sfx,cl){
+      return (v!==null&&v!==undefined&&v!=='')
+        ? '<td class="'+(cl||'')+'">'+v+(sfx||'')+'</td>'
+        : '<td class="vna">—</td>';
+    }
+    return '<tr>'+
+      '<td class="sel-col"><input type="checkbox" class="ccb" data-n="'+
+        encodeURIComponent(r.name)+'"'+(sel?' checked':'')+' ></td>'+
       '<td><strong>'+r.name+'</strong></td>'+
-      c(r.price,'','')+c(r.eps,'','')+c(r.divYield,'%','')+c(r.pe,'',peCl)+
-      c(r.nav,'','')+c(r.pbv,'',pbCl)+c(r.de,'',deCl)+
-      c(r.roe,'%','')+c(r.epsg,'%','')+c(r.revg,'%','')+c(r.totalReturn,'%','')+
+      c(r.price,   '', ''  )+
+      c(r.eps,     '', ''  )+
+      c(r.divYield,'%',''  )+
+      c(r.pe,      '', peCl)+
+      c(r.nav,     '', ''  )+
+      c(r.pbv,     '', pbCl)+
+      c(r.de,      '', deCl)+
+      c(r.roe,     '%',''  )+
+      c(r.epsg,    '', ''  )+   // no % symbol
+      c(r.revg,    '', ''  )+   // no % symbol
+      c(r.totalReturn,'%','')+
       '<td>'+dt+'</td>'+
       '<td><button class="del-btn" data-n="'+encodeURIComponent(r.name)+'">Delete</button></td>'+
       '</tr>';
   }).join('');
 
-  el.innerHTML='<div class="saved-table-wrap"><table class="saved-tbl">'+
+  el.innerHTML =
+    '<div class="saved-table-wrap"><table class="saved-tbl">'+
     '<thead><tr>'+
     '<th class="sel-col"><input type="checkbox" id="sel-all"></th>'+
     '<th>Company</th>'+
@@ -892,137 +1049,190 @@ function renderSaved(){
     '<th>NAV</th><th>PBV</th><th>D/E</th>'+
     '<th>ROE</th><th>EPS Gr.</th><th>Rev Gr.</th><th>Total Ret.</th>'+
     '<th>Saved</th><th></th>'+
-    '</tr></thead><tbody>'+rows+'</tbody></table></div>';
+    '</tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<div style="margin-top:0.8rem;text-align:right">'+
+    '<button id="refresh-saved-btn" style="background:none;border:1px solid var(--border);'+
+    'color:var(--muted);padding:0.35rem 0.8rem;border-radius:6px;font-family:DM Sans,sans-serif;'+
+    'font-size:0.78rem;cursor:pointer;">↻ Refresh Data</button></div>';
 
-  document.getElementById('sel-all').addEventListener('change',function(){
-    var chk=this.checked;
+  document.getElementById('refresh-saved-btn').addEventListener('click', refreshSaved);
+
+  document.getElementById('sel-all').addEventListener('change', function(){
+    var chk = this.checked;
     el.querySelectorAll('.ccb').forEach(function(cb){
-      cb.checked=chk;var n=decodeURIComponent(cb.dataset.n);
-      if(chk&&selForCmp.indexOf(n)===-1)selForCmp.push(n);
+      cb.checked = chk;
+      var n = decodeURIComponent(cb.dataset.n);
+      if (chk && selForCmp.indexOf(n)===-1) selForCmp.push(n);
     });
-    if(!chk)selForCmp=[];updateCmpBtn();
+    if (!chk) selForCmp = [];
+    updateCmpBtn();
   });
 
   el.querySelectorAll('.ccb').forEach(function(cb){
-    cb.addEventListener('change',function(){
-      var n=decodeURIComponent(this.dataset.n);
-      if(this.checked){if(selForCmp.indexOf(n)===-1)selForCmp.push(n);}
-      else{selForCmp=selForCmp.filter(function(x){return x!==n;});}
+    cb.addEventListener('change', function(){
+      var n = decodeURIComponent(this.dataset.n);
+      if (this.checked) { if (selForCmp.indexOf(n)===-1) selForCmp.push(n); }
+      else { selForCmp = selForCmp.filter(function(x){ return x!==n; }); }
       updateCmpBtn();
     });
   });
 
+  // Delete — clearly distinct from overwrite
   el.querySelectorAll('.del-btn').forEach(function(btn){
-    btn.addEventListener('click',function(){
-      var n=decodeURIComponent(this.dataset.n);
-      confirm2('Delete record?','Remove "'+n+'" from saved investments? This cannot be undone.',function(){
-        records=records.filter(function(r){return r.name!==n;});
-        selForCmp=selForCmp.filter(function(x){return x!==n;});
-        persist(function(ok){if(ok){updateBadge();renderSaved();toast('Deleted');}else{toast('Delete failed');}});
+    btn.addEventListener('click', function(){
+      var n = decodeURIComponent(this.dataset.n);
+      confirmDelete(n, function(){
+        // Optimistic: remove from local state immediately
+        records = records.filter(function(r){ return r.name!==n; });
+        selForCmp = selForCmp.filter(function(x){ return x!==n; });
+        persist(function(ok){
+          if (ok) {
+            updateBadge();
+            renderSaved();
+            toast('"'+n+'" deleted');
+          } else {
+            // Rollback: reload from server to avoid ghost records
+            loadRecords(function(){ renderSaved(); });
+            toast('Delete failed — data reloaded from server');
+          }
+        });
       });
     });
   });
+
   updateCmpBtn();
 }
 
-function updateCmpBtn(){
-  var b=document.getElementById('cmp-sel-btn');
-  document.getElementById('cmp-sel-count').textContent=selForCmp.length;
-  if(selForCmp.length>=2)b.classList.add('visible');else b.classList.remove('visible');
+function updateCmpBtn() {
+  var b = document.getElementById('cmp-sel-btn');
+  document.getElementById('cmp-sel-count').textContent = selForCmp.length;
+  if (selForCmp.length >= 2) b.classList.add('visible');
+  else b.classList.remove('visible');
 }
 
-document.getElementById('sector-filter').addEventListener('change',function(){selForCmp=[];renderSaved();});
-document.getElementById('cmp-sel-btn').addEventListener('click',function(){
-  if(selForCmp.length<2){toast('Select at least 2 companies');return;}
+document.getElementById('sector-filter').addEventListener('change', function(){ selForCmp=[]; renderSaved(); });
+document.getElementById('cmp-sel-btn').addEventListener('click', function(){
+  if (selForCmp.length < 2) { toast('Select at least 2 companies'); return; }
   openCmpModal(selForCmp);
 });
 
 // ─── COMPARE MODAL ─────────────────────────────────────────────────────────────
-var CMP=[
-  {k:'price',     l:'Price (LKR)',        s:''},
-  {k:'eps',       l:'EPS',               s:''},
-  {k:'divYield',  l:'Dividend Yield',    s:'%'},
-  {k:'pe',        l:'PE Ratio',          s:'', col:function(v){var f=parseFloat(v);return f<7?'vg':f<=8?'vo':'vr';}},
-  {k:'nav',       l:'NAV',               s:''},
-  {k:'pbv',       l:'PBV',               s:'', col:function(v){return parseFloat(v)<=1?'vg':'vo';}},
-  {k:'de',        l:'Debt to Equity',    s:'', col:function(v){return parseFloat(v)<=1?'vg':'vo';}},
-  {k:'roe',       l:'ROE (%)',            s:'%'},
-  {k:'epsg',      l:'EPS Growth (%)',     s:'%'},
-  {k:'revg',      l:'Revenue Growth (%)',s:'%'},
-  {k:'totalReturn',l:'Total Return',     s:'%'},
+var CMP = [
+  {k:'price',       l:'Price (LKR)',     s:''},
+  {k:'eps',         l:'EPS',            s:''},
+  {k:'divYield',    l:'Dividend Yield', s:'%'},
+  {k:'pe',          l:'PE Ratio',       s:'', col:function(v){var f=parseFloat(v);return f<7?'vg':f<=8?'vo':'vr';}},
+  {k:'nav',         l:'NAV',            s:''},
+  {k:'pbv',         l:'PBV',            s:'', col:function(v){return parseFloat(v)<=1?'vg':'vo';}},
+  {k:'de',          l:'Debt to Equity', s:'', col:function(v){return parseFloat(v)<=1?'vg':'vo';}},
+  {k:'roe',         l:'ROE (%)',         s:'%'},
+  {k:'epsg',        l:'EPS Growth',     s:''},
+  {k:'revg',        l:'Revenue Growth', s:''},
+  {k:'totalReturn', l:'Total Return',   s:'%'},
 ];
 
-function openCmpModal(names){
-  var recs=names.map(function(n){return records.find(function(r){return r.name===n;});}).filter(Boolean);
-  if(!recs.length)return;
-  var head='<th class="mc">Metric</th>'+recs.map(function(r){
-    return'<th>'+r.name+'<br><span style="font-size:0.62rem;opacity:0.7;font-weight:400">'+r.sector+'</span></th>';
+function openCmpModal(names) {
+  var recs = names.map(function(n){ return records.find(function(r){ return r.name===n; }); }).filter(Boolean);
+  if (!recs.length) return;
+  var head = '<th class="mc">Metric</th>'+recs.map(function(r){
+    return '<th>'+r.name+'<br><span style="font-size:0.62rem;opacity:0.7;font-weight:400">'+r.sector+'</span></th>';
   }).join('');
-  var body=CMP.map(function(f){
-    var cells=recs.map(function(r){
-      var v=r[f.k];
-      if(v===null||v===undefined||v==='')return'<td class="vna">—</td>';
-      var cl=f.col?f.col(v):'';
-      return'<td class="'+cl+'">'+v+f.s+'</td>';
+  var body = CMP.map(function(f){
+    var cells = recs.map(function(r){
+      var v = r[f.k];
+      if (v===null||v===undefined||v==='') return '<td class="vna">—</td>';
+      var cl = f.col ? f.col(v) : '';
+      return '<td class="'+cl+'">'+v+f.s+'</td>';
     }).join('');
-    return'<tr><td class="ml">'+f.l+'</td>'+cells+'</tr>';
+    return '<tr><td class="ml">'+f.l+'</td>'+cells+'</tr>';
   }).join('');
-  document.getElementById('cmp-body').innerHTML=
+  document.getElementById('cmp-body').innerHTML =
     '<table class="cmp-tbl"><thead><tr>'+head+'</tr></thead><tbody>'+body+'</tbody></table>';
   document.getElementById('cmp-overlay').classList.add('visible');
-  document.body.style.overflow='hidden';
+  document.body.style.overflow = 'hidden';
 }
 
-function closeCmp(){document.getElementById('cmp-overlay').classList.remove('visible');document.body.style.overflow='';}
-document.getElementById('cmp-close').addEventListener('click',closeCmp);
-document.getElementById('cmp-overlay').addEventListener('click',function(e){if(e.target===this)closeCmp();});
+function closeCmp() {
+  document.getElementById('cmp-overlay').classList.remove('visible');
+  document.body.style.overflow = '';
+}
+document.getElementById('cmp-close').addEventListener('click', closeCmp);
+document.getElementById('cmp-overlay').addEventListener('click', function(e){ if(e.target===this) closeCmp(); });
 
-// ─── CONFIRM DIALOG ────────────────────────────────────────────────────────────
-var confCb=null;
-function confirm2(title,msg,onYes){
-  document.getElementById('conf-title').textContent=title;
-  document.getElementById('conf-msg').textContent=msg;
-  confCb=onYes;
+// ─── CONFIRM DIALOGS ───────────────────────────────────────────────────────────
+var confCb = null;
+
+// Overwrite confirm
+function confirm2(title, msg, onYes) {
+  document.getElementById('conf-title').textContent = title;
+  document.getElementById('conf-msg').textContent   = msg;
+  document.getElementById('conf-yes').textContent   = 'Overwrite';
+  confCb = onYes;
   document.getElementById('conf-overlay').classList.add('visible');
-  document.body.style.overflow='hidden';
+  document.body.style.overflow = 'hidden';
 }
-document.getElementById('conf-yes').addEventListener('click',function(){
+
+// Delete confirm — distinct label, distinct call site
+function confirmDelete(name, onYes) {
+  document.getElementById('conf-title').textContent = 'Delete record?';
+  document.getElementById('conf-msg').textContent   = 'Remove "'+name+'" from saved investments? This cannot be undone.';
+  document.getElementById('conf-yes').textContent   = 'Delete';
+  confCb = onYes;
+  document.getElementById('conf-overlay').classList.add('visible');
+  document.body.style.overflow = 'hidden';
+}
+
+document.getElementById('conf-yes').addEventListener('click', function(){
   document.getElementById('conf-overlay').classList.remove('visible');
-  document.body.style.overflow='';
-  if(confCb){confCb();confCb=null;}
+  document.body.style.overflow = '';
+  if (confCb) { confCb(); confCb=null; }
 });
-document.getElementById('conf-no').addEventListener('click',function(){
+document.getElementById('conf-no').addEventListener('click', function(){
   document.getElementById('conf-overlay').classList.remove('visible');
-  document.body.style.overflow='';confCb=null;
+  document.body.style.overflow = '';
+  confCb = null;
 });
 
-// ─── WIRING ────────────────────────────────────────────────────────────────────
-document.getElementById('fetch-price-btn').addEventListener('click',fetchLive);
-document.getElementById('saved-nav-btn').addEventListener('click',openSavedPage);
-document.getElementById('upload-view-saved-btn').addEventListener('click',openSavedPage);
-document.getElementById('main-file-input').addEventListener('change',function(e){handleFile(e.target.files[0]);});
-document.getElementById('header-file-input').addEventListener('change',function(e){handleFile(e.target.files[0]);});
-document.getElementById('category-select').addEventListener('change',function(){
-  if(!this.value){document.getElementById('results').style.display='none';return;}
+// ─── EVENT WIRING ──────────────────────────────────────────────────────────────
+document.getElementById('fetch-price-btn').addEventListener('click', fetchLive);
+document.getElementById('saved-nav-btn').addEventListener('click', openSavedPage);
+document.getElementById('upload-view-saved-btn').addEventListener('click', openSavedPage);
+document.getElementById('main-file-input').addEventListener('change', function(e){ handleFile(e.target.files[0]); });
+document.getElementById('header-file-input').addEventListener('change', function(e){ handleFile(e.target.files[0]); });
+document.getElementById('category-select').addEventListener('change', function(){
+  if (!this.value) { document.getElementById('results').style.display='none'; return; }
   renderSector(this.value);
 });
-var upBox=document.getElementById('upload-prompt');
-upBox.addEventListener('dragover',function(e){e.preventDefault();upBox.classList.add('dragover');});
-upBox.addEventListener('dragleave',function(){upBox.classList.remove('dragover');});
-upBox.addEventListener('drop',function(e){e.preventDefault();upBox.classList.remove('dragover');handleFile(e.dataTransfer.files[0]);});
-document.addEventListener('keydown',function(e){
-  if(e.key==='Escape'){closeCmp();document.getElementById('conf-overlay').classList.remove('visible');document.body.style.overflow='';}
+var upBox = document.getElementById('upload-prompt');
+upBox.addEventListener('dragover',  function(e){ e.preventDefault(); upBox.classList.add('dragover'); });
+upBox.addEventListener('dragleave', function()  { upBox.classList.remove('dragover'); });
+upBox.addEventListener('drop',      function(e){ e.preventDefault(); upBox.classList.remove('dragover'); handleFile(e.dataTransfer.files[0]); });
+document.addEventListener('keydown', function(e){
+  if (e.key==='Escape') {
+    closeCmp();
+    document.getElementById('conf-overlay').classList.remove('visible');
+    document.body.style.overflow = '';
+  }
 });
 
 // ─── TOAST ─────────────────────────────────────────────────────────────────────
 var toastT;
-function toast(msg){
-  var t=document.getElementById('toast');t.textContent=msg;t.style.display='block';
-  clearTimeout(toastT);toastT=setTimeout(function(){t.style.display='none';},3500);
+function toast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.style.display = 'block';
+  clearTimeout(toastT);
+  toastT = setTimeout(function(){ t.style.display='none'; }, 3500);
 }
 
 // ─── INIT ───────────────────────────────────────────────────────────────────────
-loadRecords(); // fetch on startup so badge shows correct count
+// Hydrate CSV from sessionStorage if available — skip upload prompt
+if (loadCSVFromSession()) {
+  document.getElementById('category-select').value = '';
+  document.getElementById('results').style.display = 'none';
+  showPage('sector');
+}
+// Always fetch latest saved records from DB on load
+loadRecords();
 </script>
 </body>
 </html>
