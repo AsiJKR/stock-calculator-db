@@ -317,14 +317,14 @@
 
         <div class="input-group">
           <label>Dividend Yield</label>
-          <div class="desc">Latest dividend ÷ Price × 100</div>
-          <div id="yield-display" class="result-na">Enter price above</div>
+          <div class="desc">Auto-calculated or enter manually (%)</div>
+          <input type="number" id="yield-display" placeholder="e.g. 5.20" step="0.01" min="0">
         </div>
 
         <div class="input-group">
           <label>PE Ratio</label>
-          <div class="desc">Price ÷ EPS</div>
-          <div id="pe-display" class="result-na">Enter price &amp; EPS</div>
+          <div class="desc">Auto-calculated or enter manually</div>
+          <input type="number" id="pe-display" placeholder="e.g. 14.2" step="0.001" min="0">
         </div>
 
         <div class="input-group">
@@ -335,8 +335,8 @@
 
         <div class="input-group">
           <label>PBV</label>
-          <div class="desc">Price ÷ NAV</div>
-          <div id="pbv-display" class="result-na">Enter price &amp; NAV</div>
+          <div class="desc">Auto-calculated or enter manually</div>
+          <input type="number" id="pbv-display" placeholder="e.g. 1.5" step="0.001" min="0">
         </div>
 
         <div class="input-group">
@@ -353,8 +353,8 @@
 
         <div class="input-group">
           <label>Debt to Equity</label>
-          <div class="desc">Total liabilities ÷ equity</div>
-          <div id="de-display" style="background:var(--cream);border:1.5px solid var(--border);border-radius:7px;padding:0.65rem 0.9rem;font-size:0.95rem;color:var(--muted);min-height:2.7rem;transition:background 0.2s,border-color 0.2s,color 0.2s;">—</div>
+          <div class="desc">Auto-calculated or enter manually</div>
+          <input type="number" id="de-display" placeholder="e.g. 1.28" step="0.01" min="0">
         </div>
 
         <div class="input-group">
@@ -364,13 +364,13 @@
         </div>
 
         <div class="input-group">
-          <label>EPS Growth (%)</label>
+          <label>EPS Growth</label>
           <div class="desc">Year-on-year EPS growth</div>
           <input type="number" id="input-epsg" placeholder="e.g. 8.2" step="0.01">
         </div>
 
         <div class="input-group">
-          <label>Revenue Growth (%)</label>
+          <label>Revenue Growth</label>
           <div class="desc">Year-on-year revenue growth</div>
           <input type="number" id="input-revg" placeholder="e.g. 12.0" step="0.01">
         </div>
@@ -382,8 +382,8 @@
       <div class="invest-card-title">Total Return</div>
       <div class="input-grid">
         <div class="input-group">
-          <div class="desc">Dividend Yield + ROE</div>
-          <div id="total-display" class="result-na">Enter price &amp; ROE</div>
+          <div class="desc">Auto-calculated (Dividend Yield + ROE) or enter manually (%)</div>
+          <input type="number" id="total-display" placeholder="e.g. 20.0" step="0.01">
         </div>
       </div>
     </div>
@@ -717,14 +717,20 @@ function openInvest() {
   // Pre-fill from saved record if exists
   var saved = records.find(function(r){ return r.name===co.name; });
   if (saved) {
-    document.getElementById('input-price').value = saved.price||'';
-    document.getElementById('input-eps').value   = saved.eps||'';
-    document.getElementById('input-nav').value   = saved.nav||'';
-    document.getElementById('input-liab').value  = saved.liab||'';
-    document.getElementById('input-eq').value    = saved.eq||'';
-    document.getElementById('input-roe').value   = saved.roe||'';
-    document.getElementById('input-epsg').value  = saved.epsg||'';
-    document.getElementById('input-revg').value  = saved.revg||'';
+    document.getElementById('input-price').value  = saved.price||'';
+    document.getElementById('input-eps').value    = saved.eps||'';
+    document.getElementById('input-nav').value    = saved.nav||'';
+    document.getElementById('input-liab').value   = saved.liab||'';
+    document.getElementById('input-eq').value     = saved.eq||'';
+    document.getElementById('input-roe').value    = saved.roe||'';
+    document.getElementById('input-epsg').value   = saved.epsg||'';
+    document.getElementById('input-revg').value   = saved.revg||'';
+    // Also restore derived fields (will be overwritten by recalc if inputs are present)
+    document.getElementById('yield-display').value = saved.divYield||'';
+    document.getElementById('pe-display').value    = saved.pe||'';
+    document.getElementById('pbv-display').value   = saved.pbv||'';
+    document.getElementById('de-display').value    = saved.de||'';
+    document.getElementById('total-display').value = saved.totalReturn||'';
   } else {
     ['input-price','input-eps','input-nav','input-liab','input-eq','input-roe','input-epsg','input-revg']
       .forEach(function(id){ document.getElementById(id).value=''; });
@@ -737,15 +743,15 @@ function openInvest() {
 }
 
 function resetCalcDisplays() {
-  ['yield-display','pe-display','pbv-display','total-display'].forEach(function(id){
-    document.getElementById(id).className = 'result-na';
+  document.getElementById('yield-display').value = '';
+  document.getElementById('pe-display').value    = '';
+  document.getElementById('pbv-display').value   = '';
+  document.getElementById('de-display').value    = '';
+  document.getElementById('total-display').value = '';
+  ['yield-display','pe-display','pbv-display','de-display','total-display'].forEach(function(id){
+    colorInput(document.getElementById(id), 'neutral');
+    document.getElementById(id).dataset.autoSet = '0';
   });
-  document.getElementById('yield-display').textContent  = 'Enter price above';
-  document.getElementById('pe-display').textContent     = 'Enter price & EPS';
-  document.getElementById('pbv-display').textContent    = 'Enter price & NAV';
-  document.getElementById('total-display').textContent  = 'Enter price & ROE';
-  var de = document.getElementById('de-display');
-  de.textContent='—'; de.style.background='var(--cream)'; de.style.borderColor='var(--border)'; de.style.color='var(--muted)';
 }
 
 // ─── LIVE PRICE ────────────────────────────────────────────────────────────────
@@ -802,6 +808,20 @@ function setStatus(m, e) {
 }
 
 // ─── CALCULATIONS ──────────────────────────────────────────────────────────────
+function colorInput(el, level) {
+  // level: 'green' | 'orange' | 'red' | 'neutral'
+  var styles = {
+    green:   { bg:'var(--green-bg)', border:'#a8d5be', color:'var(--green)' },
+    orange:  { bg:'#fff4e5',         border:'#f0a030', color:'#c07010'      },
+    red:     { bg:'#fdecea',         border:'#e57373', color:'#c0392b'      },
+    neutral: { bg:'var(--cream)',    border:'var(--border)', color:'var(--ink)' },
+  };
+  var s = styles[level] || styles.neutral;
+  el.style.background   = s.bg;
+  el.style.borderColor  = s.border;
+  el.style.color        = s.color;
+}
+
 function recalc() {
   if (!currentCo) return;
   var price = safeNum(document.getElementById('input-price').value);
@@ -809,56 +829,69 @@ function recalc() {
   var nav   = safeNum(document.getElementById('input-nav').value);
   var roe   = safeNum(document.getElementById('input-roe').value);
 
-  // Dividend Yield — always computable when price > 0 (divAmt is 0 when no data)
-  var yEl=document.getElementById('yield-display'), dy=null;
+  // Dividend Yield — auto-fill input when calculable, but leave editable
+  var yEl = document.getElementById('yield-display');
+  var dy = null;
   if (!isNaN(price) && price > 0) {
     var divAmt = getDivForYield(currentCo);
     dy = divAmt / price * 100;
-    yEl.className = 'result-highlight';
-    yEl.textContent = dy.toFixed(2)+'%';
+    yEl.value = dy.toFixed(2);
+    colorInput(yEl, 'green');
   } else {
-    yEl.className = 'result-na';
-    yEl.textContent = 'Enter price above';
+    // Don't clear a manually-entered value — only clear if it was auto-set
+    if (yEl.dataset.autoSet === '1') { yEl.value = ''; yEl.dataset.autoSet = '0'; colorInput(yEl, 'neutral'); }
   }
+  if (!isNaN(price) && price > 0) yEl.dataset.autoSet = '1';
 
   // PE Ratio
   var peEl = document.getElementById('pe-display');
-  if (!isNaN(price)&&price>0&&!isNaN(eps)&&eps>0) {
-    var pe = price/eps;
-    peEl.className = pe<7?'result-highlight':pe<=8?'result-highlight-orange':'result-highlight-red';
-    peEl.textContent = pe.toFixed(3);
-  } else { peEl.className='result-na'; peEl.textContent='Enter price & EPS'; }
+  if (!isNaN(price) && price > 0 && !isNaN(eps) && eps > 0) {
+    var pe = price / eps;
+    peEl.value = pe.toFixed(3);
+    colorInput(peEl, pe < 7 ? 'green' : pe <= 8 ? 'orange' : 'red');
+    peEl.dataset.autoSet = '1';
+  } else {
+    if (peEl.dataset.autoSet === '1') { peEl.value = ''; peEl.dataset.autoSet = '0'; colorInput(peEl, 'neutral'); }
+  }
 
   // PBV
   var pbvEl = document.getElementById('pbv-display');
-  if (!isNaN(price)&&price>0&&!isNaN(nav)&&nav>0) {
-    var pbv = price/nav;
-    pbvEl.className = pbv<=1?'result-highlight':'result-highlight-orange';
-    pbvEl.textContent = pbv.toFixed(3);
-  } else { pbvEl.className='result-na'; pbvEl.textContent='Enter price & NAV'; }
+  if (!isNaN(price) && price > 0 && !isNaN(nav) && nav > 0) {
+    var pbv = price / nav;
+    pbvEl.value = pbv.toFixed(3);
+    colorInput(pbvEl, pbv <= 1 ? 'green' : 'orange');
+    pbvEl.dataset.autoSet = '1';
+  } else {
+    if (pbvEl.dataset.autoSet === '1') { pbvEl.value = ''; pbvEl.dataset.autoSet = '0'; colorInput(pbvEl, 'neutral'); }
+  }
 
   // D/E
   var deEl = document.getElementById('de-display');
   var li = safeNum(document.getElementById('input-liab').value);
   var eq = safeNum(document.getElementById('input-eq').value);
-  if (!isNaN(li)&&!isNaN(eq)&&eq!==0) {
-    var de = li/eq;
-    deEl.textContent = de.toFixed(2);
-    if (de<=1) { deEl.style.background='var(--green-bg)'; deEl.style.borderColor='#a8d5be'; deEl.style.color='var(--green)'; }
-    else       { deEl.style.background='#fff4e5'; deEl.style.borderColor='#f0a030'; deEl.style.color='#c07010'; }
+  if (!isNaN(li) && !isNaN(eq) && eq !== 0) {
+    var de = li / eq;
+    deEl.value = de.toFixed(2);
+    colorInput(deEl, de <= 1 ? 'green' : 'orange');
+    deEl.dataset.autoSet = '1';
   } else {
-    deEl.textContent='—'; deEl.style.background='var(--cream)'; deEl.style.borderColor='var(--border)'; deEl.style.color='var(--muted)';
+    if (deEl.dataset.autoSet === '1') { deEl.value = ''; deEl.dataset.autoSet = '0'; colorInput(deEl, 'neutral'); }
   }
 
   // Total Return = Div Yield + ROE
+  // Use the yield-display input value (could be manually overridden)
   var tEl = document.getElementById('total-display');
-  if (dy!==null && !isNaN(roe)) {
-    tEl.className = 'result-highlight';
-    tEl.textContent = (dy+roe).toFixed(2)+'%';
-  } else { tEl.className='result-na'; tEl.textContent='Enter price & ROE'; }
+  var dyVal = safeNum(document.getElementById('yield-display').value);
+  if (!isNaN(dyVal) && !isNaN(roe)) {
+    tEl.value = (dyVal + roe).toFixed(2);
+    colorInput(tEl, 'green');
+    tEl.dataset.autoSet = '1';
+  } else {
+    if (tEl.dataset.autoSet === '1') { tEl.value = ''; tEl.dataset.autoSet = '0'; colorInput(tEl, 'neutral'); }
+  }
 }
 
-['input-price','input-eps','input-nav','input-roe','input-liab','input-eq'].forEach(function(id){
+['input-price','input-eps','input-nav','input-roe','input-liab','input-eq','yield-display'].forEach(function(id){
   document.getElementById(id).addEventListener('input', recalc);
 });
 
@@ -879,6 +912,21 @@ function buildRecord() {
   var divAmt = getDivForYield(currentCo);
   var dy = (!isNaN(pf)&&pf>0) ? (divAmt/pf*100) : null;
 
+  // For derived fields, prefer the current input value (may be manually overridden)
+  // Fall back to recalculated value only if input is empty
+  function derivedVal(inputId, calcVal) {
+    var v = safeNum(document.getElementById(inputId).value);
+    if (!isNaN(v)) return v.toString();
+    return calcVal !== null ? calcVal : null;
+  }
+
+  var yieldVal = derivedVal('yield-display', dy !== null ? dy.toFixed(2) : null);
+  var peVal    = derivedVal('pe-display',    (!isNaN(pf)&&pf>0&&!isNaN(ef)&&ef>0) ? (pf/ef).toFixed(3) : null);
+  var pbvVal   = derivedVal('pbv-display',   (!isNaN(pf)&&pf>0&&!isNaN(nf)&&nf>0) ? (pf/nf).toFixed(3) : null);
+  var deVal    = derivedVal('de-display',    (!isNaN(lf)&&!isNaN(qf)&&qf!==0)     ? (lf/qf).toFixed(2) : null);
+  var dyForReturn = safeNum(document.getElementById('yield-display').value);
+  var totalVal = derivedVal('total-display', (!isNaN(dyForReturn)&&!isNaN(rf)) ? (dyForReturn+rf).toFixed(2) : null);
+
   var code = currentCo.metaFields.find(function(f){ return f.label==='Code'; });
   var canonicalSector = resolveSector(currentCo.category) || currentCo.category;
 
@@ -889,12 +937,12 @@ function buildRecord() {
     savedAt: new Date().toISOString(),
     // Raw inputs
     price:price, eps:eps, nav:nav, roe:roe, epsg:epsg, revg:revg, liab:liab, eq:eq,
-    // Computed derived values
-    divYield:    dy!==null                              ? dy.toFixed(2)          : null,
-    pe:          (!isNaN(pf)&&pf>0&&!isNaN(ef)&&ef>0) ? (pf/ef).toFixed(3)    : null,
-    pbv:         (!isNaN(pf)&&pf>0&&!isNaN(nf)&&nf>0) ? (pf/nf).toFixed(3)    : null,
-    de:          (!isNaN(lf)&&!isNaN(qf)&&qf!==0)     ? (lf/qf).toFixed(2)    : null,
-    totalReturn: (dy!==null&&!isNaN(rf))               ? (dy+rf).toFixed(2)    : null
+    // Derived — from input values (respects manual overrides)
+    divYield:    yieldVal,
+    pe:          peVal,
+    pbv:         pbvVal,
+    de:          deVal,
+    totalReturn: totalVal
   };
 }
 
