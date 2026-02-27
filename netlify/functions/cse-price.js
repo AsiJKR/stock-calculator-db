@@ -7,8 +7,8 @@ const HEADERS = {
   'Access-Control-Allow-Origin': '*',
 };
 
-// CSE uses this endpoint for individual symbol info
-const CSE_API = 'https://www.cse.lk/api/cse/companyInfo.json';
+// CSE requires a POST with form-encoded body, not a GET with query string
+const CSE_API = 'https://www.cse.lk/api/companyInfoSummery';
 
 exports.handler = async function (event) {
   if (event.httpMethod === 'OPTIONS') {
@@ -25,7 +25,6 @@ exports.handler = async function (event) {
     };
   }
 
-  // Validate symbol format: e.g. ABL.N0000
   if (!/^[A-Z]{1,10}\.[A-Z0-9]{5,10}$/.test(symbol)) {
     return {
       statusCode: 400,
@@ -35,21 +34,29 @@ exports.handler = async function (event) {
   }
 
   try {
-    const url = CSE_API + '?symbol=' + encodeURIComponent(symbol);
-    console.log('[cse-price] Fetching:', url);
+    console.log('[cse-price] Fetching symbol:', symbol);
 
-    const res = await fetch(url, {
+    const res = await fetch(CSE_API, {
+      method: 'POST',
       headers: {
-        // CSE API requires a browser-like User-Agent and Referer
+        'Content-Type': 'application/x-www-form-urlencoded',
         'User-Agent': 'Mozilla/5.0 (compatible; CSE-Explorer/1.0)',
         'Referer': 'https://www.cse.lk/',
         'Accept': 'application/json',
       },
+      body: 'symbol=' + encodeURIComponent(symbol),
     });
 
     console.log('[cse-price] CSE response status:', res.status);
 
-    if (res.status === 404) {
+    if (!res.ok) {
+      throw new Error('CSE API returned HTTP ' + res.status);
+    }
+
+    const data = await res.json();
+
+    // If CSE returns an empty or null reqSymbolInfo, symbol wasn't found
+    if (!data || !data.reqSymbolInfo) {
       return {
         statusCode: 200,
         headers: HEADERS,
@@ -57,14 +64,9 @@ exports.handler = async function (event) {
       };
     }
 
-    if (!res.ok) {
-      throw new Error('CSE API returned HTTP ' + res.status);
-    }
+    console.log('[cse-price] Success:', symbol, data.reqSymbolInfo.lastTradedPrice);
 
-    const data = await res.json();
-    console.log('[cse-price] Success for symbol:', symbol);
-
-    // Pass the full CSE response through — frontend reads data.reqSymbolInfo
+    // Pass full CSE response through — frontend reads data.reqSymbolInfo
     return {
       statusCode: 200,
       headers: HEADERS,
