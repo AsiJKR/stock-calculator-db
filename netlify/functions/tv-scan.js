@@ -1,6 +1,6 @@
 // netlify/functions/tv-scan.js
 // Proxies a TradingView scanner request to get live stock data for a CSE symbol.
-// Usage: GET /.netlify/functions/tv-scan?symbol=RCL  or  ?symbol=RCL.N0000
+// Usage: GET /.netlify/functions/tv-scan?symbol=RCL  (bare code, case-insensitive)
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -51,9 +51,8 @@ exports.handler = async function (event) {
     };
   }
 
-  // Accept bare code (e.g. "RCL") — append .N0000 if no dot present
-  const raw = symbolParam.trim();
-  const symbol = raw.includes('.') ? raw : raw + '.N0000';
+  // TV ticker-view-filter uses bare lowercase code only e.g. "rcl", "dvbd"
+  const symbol = symbolParam.trim().toLowerCase().replace(/\..*$/, '');
 
   // Exact request body from working Postman — only filter[0].right is dynamic
   const body = JSON.stringify({
