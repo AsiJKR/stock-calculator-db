@@ -107,6 +107,7 @@
   .input-group .desc { font-size: 0.7rem; color: var(--muted); margin-top: -0.2rem; }
   .input-group input { background: var(--cream); border: 1.5px solid var(--border); border-radius: 7px; padding: 0.65rem 0.9rem; font-family: 'DM Sans', sans-serif; font-size: 0.95rem; color: var(--ink); transition: border-color 0.2s, box-shadow 0.2s; }
   .input-group input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+  .input-group textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
   .result-highlight        { background: var(--green-bg); border: 1.5px solid #a8d5be; border-radius: 7px; padding: 0.65rem 0.9rem; font-family: 'Playfair Display', serif; font-size: 1.05rem; color: var(--green); font-weight: 600; }
   .result-highlight-orange { background: #fff4e5; border: 1.5px solid #f0a030; border-radius: 7px; padding: 0.65rem 0.9rem; font-family: 'Playfair Display', serif; font-size: 1.05rem; color: #c07010; font-weight: 600; }
   .result-highlight-red    { background: #fdecea; border: 1.5px solid #e57373; border-radius: 7px; padding: 0.65rem 0.9rem; font-family: 'Playfair Display', serif; font-size: 1.05rem; color: #c0392b; font-weight: 600; }
@@ -335,8 +336,20 @@
         </div>
 
         <div class="input-group">
+          <label>Total Liabilities</label>
+          <div class="desc">From balance sheet (auto-fetched)</div>
+          <input type="number" id="input-liab" placeholder="—" step="any" readonly style="opacity:0.7;cursor:default;">
+        </div>
+
+        <div class="input-group">
+          <label>Total Equity</label>
+          <div class="desc">From balance sheet (auto-fetched)</div>
+          <input type="number" id="input-eq" placeholder="—" step="any" readonly style="opacity:0.7;cursor:default;">
+        </div>
+
+        <div class="input-group">
           <label>Debt to Equity</label>
-          <div class="desc">Auto-fetched or enter manually</div>
+          <div class="desc">Total Liabilities ÷ Total Equity</div>
           <input type="number" id="de-display" placeholder="e.g. 1.28" step="0.01" min="0">
         </div>
 
@@ -368,6 +381,17 @@
           <div class="desc">Auto-calculated (Dividend Yield + ROE) or enter manually (%)</div>
           <input type="number" id="total-display" placeholder="e.g. 20.0" step="0.01">
         </div>
+      </div>
+    </div>
+
+    <div class="invest-card">
+      <div class="invest-card-title">Comments</div>
+      <div class="input-group">
+        <div class="desc">Notes or analysis for this investment</div>
+        <textarea id="input-comments" rows="4" placeholder="e.g. Strong brand, consistent dividends, watch for debt levels…"
+          style="background:var(--cream);border:1.5px solid var(--border);border-radius:7px;padding:0.65rem 0.9rem;
+          font-family:'DM Sans',sans-serif;font-size:0.9rem;color:var(--ink);width:100%;resize:vertical;
+          transition:border-color 0.2s,box-shadow 0.2s;"></textarea>
       </div>
     </div>
   </div>
@@ -702,9 +726,10 @@ function openInvest() {
     }).join('');
 
   // Clear all fields
-  ['input-price','input-eps','input-nav','input-roe','input-epsg','input-revg'].forEach(function(id){
+  ['input-price','input-eps','input-nav','input-roe','input-epsg','input-revg','input-liab','input-eq'].forEach(function(id){
     document.getElementById(id).value='';
   });
+  document.getElementById('input-comments').value = '';
   resetCalcDisplays();
   document.getElementById('tv-status').textContent = '';
 
@@ -717,6 +742,9 @@ function openInvest() {
     document.getElementById('input-roe').value    = saved.roe||'';
     document.getElementById('input-epsg').value   = saved.epsg||'';
     document.getElementById('input-revg').value   = saved.revg||'';
+    document.getElementById('input-liab').value   = saved.liab||'';
+    document.getElementById('input-eq').value     = saved.eq||'';
+    document.getElementById('input-comments').value = saved.comments||'';
     document.getElementById('yield-display').value = saved.divYield||'';
     document.getElementById('pe-display').value    = saved.pe||'';
     document.getElementById('pbv-display').value   = saved.pbv||'';
@@ -785,16 +813,35 @@ function fetchTradingView(codeVal) {
     }
 
     // Fill all fields from TV response
+    // d[] indices per COLUMNS definition in tv-scan.js:
+    // d[1]=price d[14]=EPS d[16]=DivYield d[17]=PE d[18]=NAV d[19]=PBV
+    // d[20]=ROE d[21]=RevGrowth d[22]=EPSGrowth d[23]=TotalLiab d[24]=TotalEquity
     setField('input-price',  d[1],  'neutral');
     setField('input-eps',    d[14], 'neutral');
     setField('input-nav',    d[18], 'neutral');
     setField('pbv-display',  d[19], r2(d[19])<=1?'green':'orange');
     setField('yield-display',d[16], 'green');
     setField('pe-display',   d[17], r2(d[17])<7?'green':r2(d[17])<=8?'orange':'red');
-    setField('de-display',   d[20], r2(d[20])<=1?'green':'orange');
-    setField('input-roe',    d[21], 'neutral');
-    setField('input-revg',   d[22], 'neutral');
-    setField('input-epsg',   d[23], 'neutral');
+    setField('input-roe',    d[20], 'neutral');
+    setField('input-revg',   d[21], 'neutral');
+    setField('input-epsg',   d[22], 'neutral');
+
+    // Total Liabilities and Total Equity — stored as read-only display fields
+    var liabRaw = safeNum(d[23]);
+    var eqRaw   = safeNum(d[24]);
+    var liabEl  = document.getElementById('input-liab');
+    var eqEl    = document.getElementById('input-eq');
+    if (!isNaN(liabRaw)) { liabEl.value = liabRaw; }
+    if (!isNaN(eqRaw))   { eqEl.value   = eqRaw; }
+
+    // D/E = Total Liabilities / Total Equity — calculated in frontend from raw numbers
+    var deEl = document.getElementById('de-display');
+    if (!isNaN(liabRaw) && !isNaN(eqRaw) && eqRaw !== 0) {
+      var deVal = liabRaw / eqRaw;
+      deEl.value = Math.round(deVal * 100) / 100;
+      colorInput(deEl, deVal <= 1 ? 'green' : 'orange');
+      deEl.dataset.autoSet = '1';
+    }
 
     // Update subtitle with TV sector + recommendation badge
     var co = currentCo;
@@ -840,7 +887,18 @@ function colorInput(el, level) {
 }
 
 function recalc() {
-  // Total Return = Dividend Yield + ROE  (only derived calc remaining)
+  // D/E = Total Liabilities / Total Equity (recalculate if user edits liab/eq manually)
+  var liab  = safeNum(document.getElementById('input-liab').value);
+  var eq    = safeNum(document.getElementById('input-eq').value);
+  var deEl  = document.getElementById('de-display');
+  if (!isNaN(liab) && !isNaN(eq) && eq !== 0) {
+    var de = liab / eq;
+    deEl.value = Math.round(de * 100) / 100;
+    colorInput(deEl, de <= 1 ? 'green' : 'orange');
+    deEl.dataset.autoSet = '1';
+  }
+
+  // Total Return = Dividend Yield + ROE
   var tEl   = document.getElementById('total-display');
   var dyVal = safeNum(document.getElementById('yield-display').value);
   var roe   = safeNum(document.getElementById('input-roe').value);
@@ -853,7 +911,7 @@ function recalc() {
   }
 }
 
-['input-roe','yield-display'].forEach(function(id){
+['input-roe','yield-display','input-liab','input-eq'].forEach(function(id){
   document.getElementById(id).addEventListener('input', recalc);
 });
 
@@ -879,6 +937,10 @@ function buildRecord() {
   var rf    = safeNum(roe);
   var totalVal = (!isNaN(dyVal)&&!isNaN(rf)) ? (dyVal+rf).toFixed(2) : null;
 
+  var liab = document.getElementById('input-liab').value;
+  var eq   = document.getElementById('input-eq').value;
+  var comments = document.getElementById('input-comments').value.trim();
+
   return {
     name:        currentCo.name,
     code:        code ? code.value : '',
@@ -887,6 +949,8 @@ function buildRecord() {
     savedAt:     new Date().toISOString(),
     // Raw inputs
     price:price, eps:eps, nav:nav, roe:roe, epsg:epsg, revg:revg,
+    liab:liab, eq:eq,
+    comments:    comments || null,
     // All field values (TV-filled or manual)
     divYield:    fv('yield-display'),
     pe:          fv('pe-display'),
@@ -1033,6 +1097,7 @@ function renderSaved() {
       c(r.epsg,    '', ''  )+   // no % symbol
       c(r.revg,    '', ''  )+   // no % symbol
       c(r.totalReturn,'%','')+
+      '<td style="max-width:160px;white-space:normal;font-size:0.73rem;color:var(--muted);line-height:1.4">'+(r.comments||'')+'</td>'+
       '<td>'+dt+'</td>'+
       '<td><button class="del-btn" data-n="'+encodeURIComponent(r.name)+'">Delete</button></td>'+
       '</tr>';
@@ -1046,7 +1111,7 @@ function renderSaved() {
     '<th>Price</th><th>EPS</th><th>Div Yield</th><th>PE</th>'+
     '<th>NAV</th><th>PBV</th><th>D/E</th>'+
     '<th>ROE</th><th>EPS Gr.</th><th>Rev Gr.</th><th>Total Ret.</th>'+
-    '<th>Saved</th><th></th>'+
+    '<th>Comments</th><th>Saved</th><th></th>'+
     '</tr></thead><tbody>'+rows+'</tbody></table></div>'+
     '<div style="margin-top:0.8rem;text-align:right">'+
     '<button id="refresh-saved-btn" style="background:none;border:1px solid var(--border);'+

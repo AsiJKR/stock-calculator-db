@@ -31,10 +31,11 @@ const COLUMNS = [
   'price_earnings_ttm',                        // d[17] PE Ratio
   'book_value_per_share_fq',                   // d[18] NAV
   'price_book_fq',                             // d[19] PBV
-  'debt_to_equity_fq',                         // d[20] D/E
-  'return_on_equity_fy',                       // d[21] ROE %
-  'total_revenue_cagr_5y',                     // d[22] Revenue Growth %
-  'earnings_per_share_diluted_yoy_growth_ttm', // d[23] EPS Growth %
+  'return_on_equity_fy',                       // d[20] ROE %
+  'total_revenue_cagr_5y',                     // d[21] Revenue Growth %
+  'earnings_per_share_diluted_yoy_growth_ttm', // d[22] EPS Growth %
+  'total_liabilities_fq',                      // d[23] Total Liabilities (for D/E calc)
+  'total_equity_fq',                           // d[24] Total Equity (for D/E calc)
 ];
 
 exports.handler = async function (event) {
