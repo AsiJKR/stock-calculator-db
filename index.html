@@ -111,8 +111,6 @@
   .result-highlight-orange { background: #fff4e5; border: 1.5px solid #f0a030; border-radius: 7px; padding: 0.65rem 0.9rem; font-family: 'Playfair Display', serif; font-size: 1.05rem; color: #c07010; font-weight: 600; }
   .result-highlight-red    { background: #fdecea; border: 1.5px solid #e57373; border-radius: 7px; padding: 0.65rem 0.9rem; font-family: 'Playfair Display', serif; font-size: 1.05rem; color: #c0392b; font-weight: 600; }
   .result-na               { background: var(--cream); border: 1.5px solid var(--border); border-radius: 7px; padding: 0.65rem 0.9rem; font-size: 0.88rem; color: var(--muted); }
-  #fetch-price-btn:hover   { background: #2d2d4a !important; }
-  #fetch-price-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .price-live-badge        { font-size: 0.68rem; color: var(--green); font-weight: 500; }
   .price-live-badge.error  { color: var(--accent); }
 
@@ -182,6 +180,9 @@
   .conf-no:hover { background: var(--border); }
 
   #toast { display: none; position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%); background: #2d2d2d; color: #fff; padding: 0.75rem 1.4rem; border-radius: 8px; font-size: 0.83rem; z-index: 999; box-shadow: 0 4px 20px rgba(0,0,0,0.2); white-space: nowrap; }
+  .rec-badge { display:inline-block; padding:0.2rem 0.65rem; border-radius:20px; font-size:0.72rem; font-weight:600; margin-left:0.6rem; vertical-align:middle; }
+  .rec-strong-buy { background:#eaf7f0; color:var(--green); border:1px solid #a8d5be; }
+  .rec-other { background:var(--cream); color:var(--muted); border:1px solid var(--border); }
   footer { text-align: center; padding: 1.8rem; font-size: 0.76rem; color: var(--muted); border-top: 1px solid var(--border); margin-top: 3rem; }
 
   @media (max-width: 700px) {
@@ -293,20 +294,14 @@
     </div>
 
     <div class="invest-card">
-      <div class="invest-card-title">Investment Calculator</div>
+      <div class="invest-card-title">Investment Data</div>
+      <div id="tv-status" style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem;min-height:1.2rem;"></div>
       <div class="input-grid">
 
         <div class="input-group">
           <label>Price (LKR)</label>
-          <div class="desc">Current or purchase price</div>
-          <div style="display:flex;gap:0.4rem;align-items:center;">
-            <input type="number" id="input-price" placeholder="e.g. 45.50" step="0.01" min="0" style="flex:1;">
-            <button id="fetch-price-btn" title="Fetch live price"
-              style="background:var(--ink);color:var(--white);border:none;border-radius:6px;padding:0.5rem 0.7rem;cursor:pointer;font-size:0.8rem;white-space:nowrap;flex-shrink:0;transition:background 0.2s;">
-              &#8635; Live
-            </button>
-          </div>
-          <div id="price-status" style="font-size:0.7rem;color:var(--muted);min-height:1rem;margin-top:0.15rem;"></div>
+          <div class="desc">Last traded price</div>
+          <input type="number" id="input-price" placeholder="e.g. 45.50" step="0.01" min="0">
         </div>
 
         <div class="input-group">
@@ -317,13 +312,13 @@
 
         <div class="input-group">
           <label>Dividend Yield</label>
-          <div class="desc">Auto-calculated or enter manually (%)</div>
+          <div class="desc">Auto-fetched or enter manually (%)</div>
           <input type="number" id="yield-display" placeholder="e.g. 5.20" step="0.01" min="0">
         </div>
 
         <div class="input-group">
           <label>PE Ratio</label>
-          <div class="desc">Auto-calculated or enter manually</div>
+          <div class="desc">Auto-fetched or enter manually</div>
           <input type="number" id="pe-display" placeholder="e.g. 14.2" step="0.001" min="0">
         </div>
 
@@ -335,25 +330,13 @@
 
         <div class="input-group">
           <label>PBV</label>
-          <div class="desc">Auto-calculated or enter manually</div>
+          <div class="desc">Auto-fetched or enter manually</div>
           <input type="number" id="pbv-display" placeholder="e.g. 1.5" step="0.001" min="0">
         </div>
 
         <div class="input-group">
-          <label>Total Liabilities</label>
-          <div class="desc">From balance sheet</div>
-          <input type="text" id="input-liab" placeholder="e.g. 1,250,000">
-        </div>
-
-        <div class="input-group">
-          <label>Total Equity</label>
-          <div class="desc">From balance sheet</div>
-          <input type="text" id="input-eq" placeholder="e.g. 980,000">
-        </div>
-
-        <div class="input-group">
           <label>Debt to Equity</label>
-          <div class="desc">Auto-calculated or enter manually</div>
+          <div class="desc">Auto-fetched or enter manually</div>
           <input type="number" id="de-display" placeholder="e.g. 1.28" step="0.01" min="0">
         </div>
 
@@ -689,8 +672,12 @@ function openInvest() {
   if (!currentCo) return;
   var co = currentCo;
   document.getElementById('invest-company-name').textContent = co.name;
+
+  // Subtitle: code · sector (TV sector replaces this once data loads)
   var code = co.metaFields.find(function(f){ return f.label==='Code'; });
-  document.getElementById('invest-company-sub').textContent = (code?code.value+' · ':'')+co.category;
+  var codeVal = code ? code.value : '';
+  document.getElementById('invest-company-sub').innerHTML =
+    (codeVal ? codeVal+' · ' : '') + co.category;
 
   // Dividend history table
   var allYrs = Object.keys(co.yearData).sort(function(a,b){ return b-a; });
@@ -714,102 +701,132 @@ function openInvest() {
         '<td class="'+cl+'"><span class="div-empty">-</span></td>';
     }).join('');
 
+  // Clear all fields
+  ['input-price','input-eps','input-nav','input-roe','input-epsg','input-revg'].forEach(function(id){
+    document.getElementById(id).value='';
+  });
+  resetCalcDisplays();
+  document.getElementById('tv-status').textContent = '';
+
   // Pre-fill from saved record if exists
   var saved = records.find(function(r){ return r.name===co.name; });
   if (saved) {
     document.getElementById('input-price').value  = saved.price||'';
     document.getElementById('input-eps').value    = saved.eps||'';
     document.getElementById('input-nav').value    = saved.nav||'';
-    document.getElementById('input-liab').value   = saved.liab||'';
-    document.getElementById('input-eq').value     = saved.eq||'';
     document.getElementById('input-roe').value    = saved.roe||'';
     document.getElementById('input-epsg').value   = saved.epsg||'';
     document.getElementById('input-revg').value   = saved.revg||'';
-    // Also restore derived fields (will be overwritten by recalc if inputs are present)
     document.getElementById('yield-display').value = saved.divYield||'';
     document.getElementById('pe-display').value    = saved.pe||'';
     document.getElementById('pbv-display').value   = saved.pbv||'';
     document.getElementById('de-display').value    = saved.de||'';
     document.getElementById('total-display').value = saved.totalReturn||'';
-  } else {
-    ['input-price','input-eps','input-nav','input-liab','input-eq','input-roe','input-epsg','input-revg']
-      .forEach(function(id){ document.getElementById(id).value=''; });
   }
 
-  resetCalcDisplays();
-  document.getElementById('price-status').innerHTML = '';
   showPage('invest');
   if (saved) recalc();
+
+  // Auto-fetch from TradingView — always try to get fresh data
+  if (codeVal) fetchTradingView(codeVal);
 }
 
 function resetCalcDisplays() {
-  document.getElementById('yield-display').value = '';
-  document.getElementById('pe-display').value    = '';
-  document.getElementById('pbv-display').value   = '';
-  document.getElementById('de-display').value    = '';
-  document.getElementById('total-display').value = '';
   ['yield-display','pe-display','pbv-display','de-display','total-display'].forEach(function(id){
+    document.getElementById(id).value = '';
     colorInput(document.getElementById(id), 'neutral');
     document.getElementById(id).dataset.autoSet = '0';
   });
 }
 
-// ─── LIVE PRICE ────────────────────────────────────────────────────────────────
-function fetchLive() {
-  if (!currentCo) return;
-  var cf = currentCo.metaFields.find(function(f){ return f.label==='Code'; });
-  var code = cf ? cf.value.trim() : null;
-  if (!code) { setStatus('No stock code found', true); return; }
-  var sym = code+'.N0000';
-  var btn = document.getElementById('fetch-price-btn');
-  btn.disabled=true; btn.textContent='...';
-  document.getElementById('price-status').textContent = 'Fetching from CSE…';
+// ─── TRADINGVIEW DATA FETCH ────────────────────────────────────────────────────
+// Mapping of d[] array indices from the TradingView scanner response:
+// d[1]  = price
+// d[14] = EPS
+// d[18] = NAV (book value per share)
+// d[19] = PBV
+// d[16] = Dividend Yield %
+// d[17] = PE Ratio
+// d[20] = Debt to Equity
+// d[21] = ROE %
+// d[22] = Revenue Growth %
+// d[23] = EPS Growth %
+// d[12] = recommendation key (e.g. "StrongBuy")
+// d[13] = recommendation label (e.g. "Strong buy")
+// d[11] = sector label from TV (e.g. "Producer Manufacturing")
 
-  fetch('/.netlify/functions/cse-price?symbol='+encodeURIComponent(sym))
-  .then(function(r) {
-    if (r.status===404) throw new Error('ENDPOINT_404');
-    if (!r.ok)          throw new Error('HTTP_'+r.status);
+function fetchTradingView(codeVal) {
+  var tvSt = document.getElementById('tv-status');
+  tvSt.textContent = '⟳ Loading data…';
+  tvSt.style.color = 'var(--muted)';
+
+  fetch('/.netlify/functions/tv-scan?symbol=' + encodeURIComponent(codeVal))
+  .then(function(r){
+    if (!r.ok) throw new Error('HTTP_'+r.status);
     return r.json();
   })
-  .then(function(d) {
-    btn.disabled=false; btn.innerHTML='↻ Live';
-    if (d && d.reqSymbolInfo && d.reqSymbolInfo.lastTradedPrice) {
-      var p=d.reqSymbolInfo.lastTradedPrice;
-      var ch=d.reqSymbolInfo.change||0, pct=d.reqSymbolInfo.changePercentage||0;
-      document.getElementById('input-price').value = p;
-      var s = ch>=0?'+':'';
-      document.getElementById('price-status').innerHTML =
-        '<span class="price-live-badge">✓ LKR '+p+' ('+s+ch.toFixed(2)+' / '+s+pct.toFixed(2)+'%)</span>';
-      recalc();
-    } else {
-      // Symbol not found upstream — price field unchanged, calculations unaffected
-      setStatus('Symbol '+sym+' not found on CSE — enter price manually', true);
+  .then(function(resp){
+    if (!resp.ok || !resp.data) {
+      tvSt.textContent = resp.error || 'No data found for this symbol';
+      tvSt.style.color = 'var(--accent)';
+      return;
     }
-  })
-  .catch(function(err) {
-    btn.disabled=false; btn.innerHTML='↻ Live';
-    var msg = err && err.message;
-    if (msg==='ENDPOINT_404') {
-      setStatus('Live price unavailable — enter price manually', true);
-      console.error('[CSE] cse-price function returned 404. Check Netlify Functions tab — function may not be deployed.');
-    } else if (msg && msg.indexOf('HTTP_')===0) {
-      setStatus('CSE server error ('+msg+') — enter price manually', true);
-    } else {
-      setStatus('Network error — enter price manually', true);
-    }
-    // Price field is untouched — existing value and calculations are preserved
-  });
-}
+    var d = resp.data; // the d[] array
 
-function setStatus(m, e) {
-  var el = document.getElementById('price-status');
-  el.textContent = m;
-  el.className = e ? 'price-live-badge error' : '';
+    function r2(v){ var n=safeNum(v); return isNaN(n)?null:Math.round(n*100)/100; }
+    function setField(id, val, colorLevel) {
+      var n = r2(val);
+      var el = document.getElementById(id);
+      if (n !== null) {
+        el.value = n;
+        colorInput(el, colorLevel || 'neutral');
+        el.dataset.autoSet = '1';
+      }
+    }
+
+    // Fill all fields from TV response
+    setField('input-price',  d[1],  'neutral');
+    setField('input-eps',    d[14], 'neutral');
+    setField('input-nav',    d[18], 'neutral');
+    setField('pbv-display',  d[19], r2(d[19])<=1?'green':'orange');
+    setField('yield-display',d[16], 'green');
+    setField('pe-display',   d[17], r2(d[17])<7?'green':r2(d[17])<=8?'orange':'red');
+    setField('de-display',   d[20], r2(d[20])<=1?'green':'orange');
+    setField('input-roe',    d[21], 'neutral');
+    setField('input-revg',   d[22], 'neutral');
+    setField('input-epsg',   d[23], 'neutral');
+
+    // Update subtitle with TV sector + recommendation badge
+    var co = currentCo;
+    var codeF = co.metaFields.find(function(f){ return f.label==='Code'; });
+    var codeStr = codeF ? codeF.value : '';
+    var tvSector = d[11] || co.category;
+    var recLabel = d[13] || '';
+    var isStrongBuy = (d[12] === 'StrongBuy');
+    var badgeHtml = recLabel
+      ? '<span class="rec-badge '+(isStrongBuy?'rec-strong-buy':'rec-other')+'">'+recLabel+'</span>'
+      : '';
+    document.getElementById('invest-company-sub').innerHTML =
+      (codeStr ? codeStr+' · ' : '') + tvSector + badgeHtml;
+
+    // Store TV sector on currentCo so buildRecord can use it
+    currentCo.tvSector = tvSector;
+    currentCo.tvRec    = recLabel;
+
+    recalc();
+    tvSt.textContent = '✓ Data loaded from TradingView';
+    tvSt.style.color = 'var(--green)';
+    setTimeout(function(){ tvSt.textContent=''; }, 3000);
+  })
+  .catch(function(err){
+    tvSt.textContent = 'Could not load live data — enter values manually';
+    tvSt.style.color = 'var(--accent)';
+    console.error('[CSE] tv-scan error:', err.message);
+  });
 }
 
 // ─── CALCULATIONS ──────────────────────────────────────────────────────────────
 function colorInput(el, level) {
-  // level: 'green' | 'orange' | 'red' | 'neutral'
   var styles = {
     green:   { bg:'var(--green-bg)', border:'#a8d5be', color:'var(--green)' },
     orange:  { bg:'#fff4e5',         border:'#f0a030', color:'#c07010'      },
@@ -817,131 +834,64 @@ function colorInput(el, level) {
     neutral: { bg:'var(--cream)',    border:'var(--border)', color:'var(--ink)' },
   };
   var s = styles[level] || styles.neutral;
-  el.style.background   = s.bg;
-  el.style.borderColor  = s.border;
-  el.style.color        = s.color;
+  el.style.background  = s.bg;
+  el.style.borderColor = s.border;
+  el.style.color       = s.color;
 }
 
 function recalc() {
-  if (!currentCo) return;
-  var price = safeNum(document.getElementById('input-price').value);
-  var eps   = safeNum(document.getElementById('input-eps').value);
-  var nav   = safeNum(document.getElementById('input-nav').value);
-  var roe   = safeNum(document.getElementById('input-roe').value);
-
-  // Dividend Yield — auto-fill input when calculable, but leave editable
-  var yEl = document.getElementById('yield-display');
-  var dy = null;
-  if (!isNaN(price) && price > 0) {
-    var divAmt = getDivForYield(currentCo);
-    dy = divAmt / price * 100;
-    yEl.value = dy.toFixed(2);
-    colorInput(yEl, 'green');
-  } else {
-    // Don't clear a manually-entered value — only clear if it was auto-set
-    if (yEl.dataset.autoSet === '1') { yEl.value = ''; yEl.dataset.autoSet = '0'; colorInput(yEl, 'neutral'); }
-  }
-  if (!isNaN(price) && price > 0) yEl.dataset.autoSet = '1';
-
-  // PE Ratio
-  var peEl = document.getElementById('pe-display');
-  if (!isNaN(price) && price > 0 && !isNaN(eps) && eps > 0) {
-    var pe = price / eps;
-    peEl.value = pe.toFixed(3);
-    colorInput(peEl, pe < 7 ? 'green' : pe <= 8 ? 'orange' : 'red');
-    peEl.dataset.autoSet = '1';
-  } else {
-    if (peEl.dataset.autoSet === '1') { peEl.value = ''; peEl.dataset.autoSet = '0'; colorInput(peEl, 'neutral'); }
-  }
-
-  // PBV
-  var pbvEl = document.getElementById('pbv-display');
-  if (!isNaN(price) && price > 0 && !isNaN(nav) && nav > 0) {
-    var pbv = price / nav;
-    pbvEl.value = pbv.toFixed(3);
-    colorInput(pbvEl, pbv <= 1 ? 'green' : 'orange');
-    pbvEl.dataset.autoSet = '1';
-  } else {
-    if (pbvEl.dataset.autoSet === '1') { pbvEl.value = ''; pbvEl.dataset.autoSet = '0'; colorInput(pbvEl, 'neutral'); }
-  }
-
-  // D/E
-  var deEl = document.getElementById('de-display');
-  var li = safeNum(document.getElementById('input-liab').value);
-  var eq = safeNum(document.getElementById('input-eq').value);
-  if (!isNaN(li) && !isNaN(eq) && eq !== 0) {
-    var de = li / eq;
-    deEl.value = de.toFixed(2);
-    colorInput(deEl, de <= 1 ? 'green' : 'orange');
-    deEl.dataset.autoSet = '1';
-  } else {
-    if (deEl.dataset.autoSet === '1') { deEl.value = ''; deEl.dataset.autoSet = '0'; colorInput(deEl, 'neutral'); }
-  }
-
-  // Total Return = Div Yield + ROE
-  // Use the yield-display input value (could be manually overridden)
-  var tEl = document.getElementById('total-display');
+  // Total Return = Dividend Yield + ROE  (only derived calc remaining)
+  var tEl   = document.getElementById('total-display');
   var dyVal = safeNum(document.getElementById('yield-display').value);
+  var roe   = safeNum(document.getElementById('input-roe').value);
   if (!isNaN(dyVal) && !isNaN(roe)) {
     tEl.value = (dyVal + roe).toFixed(2);
     colorInput(tEl, 'green');
     tEl.dataset.autoSet = '1';
   } else {
-    if (tEl.dataset.autoSet === '1') { tEl.value = ''; tEl.dataset.autoSet = '0'; colorInput(tEl, 'neutral'); }
+    if (tEl.dataset.autoSet === '1') { tEl.value=''; tEl.dataset.autoSet='0'; colorInput(tEl,'neutral'); }
   }
 }
 
-['input-price','input-eps','input-nav','input-roe','input-liab','input-eq','yield-display'].forEach(function(id){
+['input-roe','yield-display'].forEach(function(id){
   document.getElementById(id).addEventListener('input', recalc);
 });
 
 // ─── SAVE ──────────────────────────────────────────────────────────────────────
 function buildRecord() {
   if (!currentCo) return null;
-  var price=document.getElementById('input-price').value;
-  var eps  =document.getElementById('input-eps').value;
-  var nav  =document.getElementById('input-nav').value;
-  var roe  =document.getElementById('input-roe').value;
-  var epsg =document.getElementById('input-epsg').value;
-  var revg =document.getElementById('input-revg').value;
-  var liab =document.getElementById('input-liab').value;
-  var eq   =document.getElementById('input-eq').value;
+  var price = document.getElementById('input-price').value;
+  var eps   = document.getElementById('input-eps').value;
+  var nav   = document.getElementById('input-nav').value;
+  var roe   = document.getElementById('input-roe').value;
+  var epsg  = document.getElementById('input-epsg').value;
+  var revg  = document.getElementById('input-revg').value;
 
-  var pf=safeNum(price), ef=safeNum(eps), nf=safeNum(nav), rf=safeNum(roe);
-  var lf=safeNum(liab),  qf=safeNum(eq);
-  var divAmt = getDivForYield(currentCo);
-  var dy = (!isNaN(pf)&&pf>0) ? (divAmt/pf*100) : null;
-
-  // For derived fields, prefer the current input value (may be manually overridden)
-  // Fall back to recalculated value only if input is empty
-  function derivedVal(inputId, calcVal) {
-    var v = safeNum(document.getElementById(inputId).value);
-    if (!isNaN(v)) return v.toString();
-    return calcVal !== null ? calcVal : null;
-  }
-
-  var yieldVal = derivedVal('yield-display', dy !== null ? dy.toFixed(2) : null);
-  var peVal    = derivedVal('pe-display',    (!isNaN(pf)&&pf>0&&!isNaN(ef)&&ef>0) ? (pf/ef).toFixed(3) : null);
-  var pbvVal   = derivedVal('pbv-display',   (!isNaN(pf)&&pf>0&&!isNaN(nf)&&nf>0) ? (pf/nf).toFixed(3) : null);
-  var deVal    = derivedVal('de-display',    (!isNaN(lf)&&!isNaN(qf)&&qf!==0)     ? (lf/qf).toFixed(2) : null);
-  var dyForReturn = safeNum(document.getElementById('yield-display').value);
-  var totalVal = derivedVal('total-display', (!isNaN(dyForReturn)&&!isNaN(rf)) ? (dyForReturn+rf).toFixed(2) : null);
+  // Read all field values directly (TV-filled or manually entered)
+  function fv(id){ var n=safeNum(document.getElementById(id).value); return isNaN(n)?null:String(n); }
 
   var code = currentCo.metaFields.find(function(f){ return f.label==='Code'; });
-  var canonicalSector = resolveSector(currentCo.category) || currentCo.category;
+  // Prefer TV sector if we got it, else CSV sector
+  var sector = currentCo.tvSector || resolveSector(currentCo.category) || currentCo.category;
+
+  // Total Return
+  var dyVal = safeNum(document.getElementById('yield-display').value);
+  var rf    = safeNum(roe);
+  var totalVal = (!isNaN(dyVal)&&!isNaN(rf)) ? (dyVal+rf).toFixed(2) : null;
 
   return {
-    name:    currentCo.name,
-    code:    code ? code.value : '',
-    sector:  canonicalSector,
-    savedAt: new Date().toISOString(),
+    name:        currentCo.name,
+    code:        code ? code.value : '',
+    sector:      sector,
+    recommendation: currentCo.tvRec || null,
+    savedAt:     new Date().toISOString(),
     // Raw inputs
-    price:price, eps:eps, nav:nav, roe:roe, epsg:epsg, revg:revg, liab:liab, eq:eq,
-    // Derived — from input values (respects manual overrides)
-    divYield:    yieldVal,
-    pe:          peVal,
-    pbv:         pbvVal,
-    de:          deVal,
+    price:price, eps:eps, nav:nav, roe:roe, epsg:epsg, revg:revg,
+    // All field values (TV-filled or manual)
+    divYield:    fv('yield-display'),
+    pe:          fv('pe-display'),
+    pbv:         fv('pbv-display'),
+    de:          fv('de-display'),
     totalReturn: totalVal
   };
 }
@@ -1242,7 +1192,6 @@ document.getElementById('conf-no').addEventListener('click', function(){
 });
 
 // ─── EVENT WIRING ──────────────────────────────────────────────────────────────
-document.getElementById('fetch-price-btn').addEventListener('click', fetchLive);
 document.getElementById('saved-nav-btn').addEventListener('click', openSavedPage);
 document.getElementById('upload-view-saved-btn').addEventListener('click', openSavedPage);
 document.getElementById('main-file-input').addEventListener('change', function(e){ handleFile(e.target.files[0]); });
