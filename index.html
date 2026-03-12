@@ -108,6 +108,15 @@
   .input-group input { background: var(--cream); border: 1.5px solid var(--border); border-radius: 7px; padding: 0.65rem 0.9rem; font-family: 'DM Sans', sans-serif; font-size: 0.95rem; color: var(--ink); transition: border-color 0.2s, box-shadow 0.2s; }
   .input-group input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
   .input-group textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+  .field-ro { background:var(--cream); border:1.5px solid var(--border); border-radius:7px; padding:0.65rem 0.9rem; font-family:'Playfair Display',serif; font-size:1.05rem; color:var(--ink); font-weight:600; min-height:2.7rem; transition:background 0.2s,border-color 0.2s,color 0.2s; }
+  .field-ro.field-ro-green  { background:var(--green-bg); border-color:#a8d5be; color:var(--green); }
+  .field-ro.field-ro-orange { background:#fff4e5; border-color:#f0a030; color:#c07010; }
+  .field-ro.field-ro-red    { background:#fdecea; border-color:#e57373; color:#c0392b; }
+  .info-icon { display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px; border-radius:50%; background:var(--muted); color:#fff; font-size:0.6rem; font-style:normal; cursor:pointer; vertical-align:middle; margin-left:0.3rem; position:relative; font-family:'DM Sans',sans-serif; flex-shrink:0; }
+  .info-icon:hover { background:var(--ink); }
+  .tooltip-box { display:none; position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; font-size:0.72rem; font-family:'DM Sans',sans-serif; font-weight:400; line-height:1.5; padding:0.55rem 0.75rem; border-radius:7px; width:240px; z-index:50; pointer-events:none; box-shadow:0 4px 16px rgba(0,0,0,0.2); }
+  .tooltip-box::after { content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:5px solid transparent; border-top-color:var(--ink); }
+  .info-icon:hover .tooltip-box { display:block; }
   .result-highlight        { background: var(--green-bg); border: 1.5px solid #a8d5be; border-radius: 7px; padding: 0.65rem 0.9rem; font-family: 'Playfair Display', serif; font-size: 1.05rem; color: var(--green); font-weight: 600; }
   .result-highlight-orange { background: #fff4e5; border: 1.5px solid #f0a030; border-radius: 7px; padding: 0.65rem 0.9rem; font-family: 'Playfair Display', serif; font-size: 1.05rem; color: #c07010; font-weight: 600; }
   .result-highlight-red    { background: #fdecea; border: 1.5px solid #e57373; border-radius: 7px; padding: 0.65rem 0.9rem; font-family: 'Playfair Display', serif; font-size: 1.05rem; color: #c0392b; font-weight: 600; }
@@ -301,74 +310,74 @@
 
         <div class="input-group">
           <label>Price (LKR)</label>
-          <div class="desc">Last traded price</div>
-          <input type="number" id="input-price" placeholder="e.g. 45.50" step="0.01" min="0">
+          <div class="field-ro" id="input-price-ro">0</div>
+          <input type="hidden" id="input-price">
         </div>
 
         <div class="input-group">
           <label>EPS</label>
-          <div class="desc">Earnings per share</div>
-          <input type="number" id="input-eps" placeholder="e.g. 3.20" step="0.01">
+          <div class="field-ro" id="input-eps-ro">0</div>
+          <input type="hidden" id="input-eps">
         </div>
 
         <div class="input-group">
           <label>Dividend Yield</label>
-          <div class="desc">Auto-fetched or enter manually (%)</div>
-          <input type="number" id="yield-display" placeholder="e.g. 5.20" step="0.01" min="0">
+          <div class="field-ro" id="yield-display-ro">0%</div>
+          <input type="hidden" id="yield-display">
         </div>
 
         <div class="input-group">
           <label>PE Ratio</label>
-          <div class="desc">Auto-fetched or enter manually</div>
-          <input type="number" id="pe-display" placeholder="e.g. 14.2" step="0.001" min="0">
+          <div class="field-ro" id="pe-display-ro">0</div>
+          <input type="hidden" id="pe-display">
         </div>
 
         <div class="input-group">
           <label>NAV</label>
-          <div class="desc">Net asset value per share</div>
-          <input type="number" id="input-nav" placeholder="e.g. 12.50" step="0.01">
+          <div class="field-ro" id="input-nav-ro">0</div>
+          <input type="hidden" id="input-nav">
         </div>
 
         <div class="input-group">
           <label>PBV</label>
-          <div class="desc">Auto-fetched or enter manually</div>
-          <input type="number" id="pbv-display" placeholder="e.g. 1.5" step="0.001" min="0">
+          <div class="field-ro" id="pbv-display-ro">0</div>
+          <input type="hidden" id="pbv-display">
         </div>
 
         <div class="input-group">
           <label>Total Liabilities</label>
-          <div class="desc">From balance sheet (auto-fetched)</div>
-          <input type="number" id="input-liab" placeholder="—" step="any" readonly style="opacity:0.7;cursor:default;">
+          <div class="field-ro" id="input-liab-ro">0</div>
+          <input type="hidden" id="input-liab">
         </div>
 
         <div class="input-group">
           <label>Total Equity</label>
-          <div class="desc">From balance sheet (auto-fetched)</div>
-          <input type="number" id="input-eq" placeholder="—" step="any" readonly style="opacity:0.7;cursor:default;">
+          <div class="field-ro" id="input-eq-ro">0</div>
+          <input type="hidden" id="input-eq">
         </div>
 
         <div class="input-group">
           <label>Debt to Equity</label>
-          <div class="desc">Total Liabilities ÷ Total Equity</div>
-          <input type="number" id="de-display" placeholder="e.g. 1.28" step="0.01" min="0">
+          <div class="field-ro" id="de-display-ro">0</div>
+          <input type="hidden" id="de-display">
         </div>
 
         <div class="input-group">
-          <label>ROE (%)</label>
-          <div class="desc">Return on equity</div>
-          <input type="number" id="input-roe" placeholder="e.g. 14.5" step="0.01">
+          <label>ROE</label>
+          <div class="field-ro" id="input-roe-ro">0%</div>
+          <input type="hidden" id="input-roe">
         </div>
 
         <div class="input-group">
-          <label>EPS Growth</label>
-          <div class="desc">Year-on-year EPS growth</div>
-          <input type="number" id="input-epsg" placeholder="e.g. 8.2" step="0.01">
+          <label>EPS Growth <span class="info-icon" data-tooltip="epsg">&#9432;<span class="tooltip-box">Compares the percentage change in diluted EPS for the last known TTM period ending, for example, in Q2 2026 with the TTM period ending in Q2 2025.</span></span></label>
+          <div class="field-ro" id="input-epsg-ro">0%</div>
+          <input type="hidden" id="input-epsg">
         </div>
 
         <div class="input-group">
-          <label>Revenue Growth</label>
-          <div class="desc">Year-on-year revenue growth</div>
-          <input type="number" id="input-revg" placeholder="e.g. 12.0" step="0.01">
+          <label>Revenue Growth <span class="info-icon" data-tooltip="revg">&#9432;<span class="tooltip-box">Last 5 year average growth percentage.</span></span></label>
+          <div class="field-ro" id="input-revg-ro">0%</div>
+          <input type="hidden" id="input-revg">
         </div>
 
       </div>
@@ -378,8 +387,8 @@
       <div class="invest-card-title">Total Return</div>
       <div class="input-grid">
         <div class="input-group">
-          <div class="desc">Auto-calculated (Dividend Yield + ROE) or enter manually (%)</div>
-          <input type="number" id="total-display" placeholder="e.g. 20.0" step="0.01">
+          <div class="field-ro field-ro-green" id="total-display-ro">0%</div>
+          <input type="hidden" id="total-display">
         </div>
       </div>
     </div>
@@ -387,7 +396,6 @@
     <div class="invest-card">
       <div class="invest-card-title">Comments</div>
       <div class="input-group">
-        <div class="desc">Notes or analysis for this investment</div>
         <textarea id="input-comments" rows="4" placeholder="e.g. Strong brand, consistent dividends, watch for debt levels…"
           style="background:var(--cream);border:1.5px solid var(--border);border-radius:7px;padding:0.65rem 0.9rem;
           font-family:'DM Sans',sans-serif;font-size:0.9rem;color:var(--ink);width:100%;resize:vertical;
@@ -726,9 +734,6 @@ function openInvest() {
     }).join('');
 
   // Clear all fields
-  ['input-price','input-eps','input-nav','input-roe','input-epsg','input-revg','input-liab','input-eq'].forEach(function(id){
-    document.getElementById(id).value='';
-  });
   document.getElementById('input-comments').value = '';
   resetCalcDisplays();
   document.getElementById('tv-status').textContent = '';
@@ -736,20 +741,31 @@ function openInvest() {
   // Pre-fill from saved record if exists
   var saved = records.find(function(r){ return r.name===co.name; });
   if (saved) {
-    document.getElementById('input-price').value  = saved.price||'';
-    document.getElementById('input-eps').value    = saved.eps||'';
-    document.getElementById('input-nav').value    = saved.nav||'';
-    document.getElementById('input-roe').value    = saved.roe||'';
-    document.getElementById('input-epsg').value   = saved.epsg||'';
-    document.getElementById('input-revg').value   = saved.revg||'';
-    document.getElementById('input-liab').value   = saved.liab||'';
-    document.getElementById('input-eq').value     = saved.eq||'';
+    // Pre-fill hidden inputs + ro-divs from saved record
+    function fillSaved(id, val, sfx, colorClass) {
+      var n = safeNum(val); if(isNaN(n)) n=0;
+      n = Math.round(n*100)/100;
+      var h=document.getElementById(id); if(h) h.value=n;
+      var ro=document.getElementById(id+'-ro');
+      if(ro){ ro.textContent=n+(sfx||''); ro.className='field-ro'+(colorClass?' field-ro-'+colorClass:''); }
+    }
+    fillSaved('input-price',  saved.price,      '',  '');
+    fillSaved('input-eps',    saved.eps,         '',  '');
+    fillSaved('input-nav',    saved.nav,         '',  '');
+    fillSaved('input-roe',    saved.roe,         '%', '');
+    fillSaved('input-epsg',   saved.epsg,        '%', '');
+    fillSaved('input-revg',   saved.revg,        '%', '');
+    fillSaved('input-liab',   saved.liab,        '',  '');
+    fillSaved('input-eq',     saved.eq,          '',  '');
+    fillSaved('yield-display',saved.divYield,    '%', '');
+    var peN=safeNum(saved.pe);   if(isNaN(peN))  peN=0;
+    fillSaved('pe-display',   peN,  '', peN<7?'green':peN<=8?'orange':'red');
+    var pbN=safeNum(saved.pbv);  if(isNaN(pbN))  pbN=0;
+    fillSaved('pbv-display',  pbN,  '', pbN<=1?'green':'orange');
+    var deN=safeNum(saved.de);   if(isNaN(deN))  deN=0;
+    fillSaved('de-display',   deN,  '', deN<=1?'green':'orange');
+    fillSaved('total-display',saved.totalReturn, '%', 'green');
     document.getElementById('input-comments').value = saved.comments||'';
-    document.getElementById('yield-display').value = saved.divYield||'';
-    document.getElementById('pe-display').value    = saved.pe||'';
-    document.getElementById('pbv-display').value   = saved.pbv||'';
-    document.getElementById('de-display').value    = saved.de||'';
-    document.getElementById('total-display').value = saved.totalReturn||'';
   }
 
   showPage('invest');
@@ -760,28 +776,34 @@ function openInvest() {
 }
 
 function resetCalcDisplays() {
-  ['yield-display','pe-display','pbv-display','de-display','total-display'].forEach(function(id){
-    document.getElementById(id).value = '';
-    colorInput(document.getElementById(id), 'neutral');
-    document.getElementById(id).dataset.autoSet = '0';
+  // Reset all hidden inputs and their corresponding ro-divs to 0
+  var fields = [
+    {id:'input-price',   sfx:'',  cls:''},
+    {id:'input-eps',     sfx:'',  cls:''},
+    {id:'input-nav',     sfx:'',  cls:''},
+    {id:'input-liab',    sfx:'',  cls:''},
+    {id:'input-eq',      sfx:'',  cls:''},
+    {id:'input-roe',     sfx:'%', cls:''},
+    {id:'input-epsg',    sfx:'%', cls:''},
+    {id:'input-revg',    sfx:'%', cls:''},
+    {id:'yield-display', sfx:'%', cls:''},
+    {id:'pe-display',    sfx:'',  cls:''},
+    {id:'pbv-display',   sfx:'',  cls:''},
+    {id:'de-display',    sfx:'',  cls:''},
+    {id:'total-display', sfx:'%', cls:''},
+  ];
+  fields.forEach(function(f){
+    var h = document.getElementById(f.id);
+    if (h) h.value = '0';
+    var ro = document.getElementById(f.id+'-ro');
+    if (ro) { ro.textContent = '0'+(f.sfx||''); ro.className = 'field-ro'; }
   });
 }
 
 // ─── TRADINGVIEW DATA FETCH ────────────────────────────────────────────────────
-// Mapping of d[] array indices from the TradingView scanner response:
-// d[1]  = price
-// d[14] = EPS
-// d[18] = NAV (book value per share)
-// d[19] = PBV
-// d[16] = Dividend Yield %
-// d[17] = PE Ratio
-// d[20] = Debt to Equity
-// d[21] = ROE %
-// d[22] = Revenue Growth %
-// d[23] = EPS Growth %
-// d[12] = recommendation key (e.g. "StrongBuy")
-// d[13] = recommendation label (e.g. "Strong buy")
-// d[11] = sector label from TV (e.g. "Producer Manufacturing")
+// d[] indices: d[1]=price d[14]=EPS d[16]=DivYield% d[17]=PE d[18]=NAV d[19]=PBV
+//              d[20]=ROE% d[21]=RevGrowth% d[22]=EPSGrowth% d[23]=TotalLiab d[24]=TotalEq
+//              d[11]=sector d[12]=recKey d[13]=recLabel
 
 function fetchTradingView(codeVal) {
   var tvSt = document.getElementById('tv-status');
@@ -801,47 +823,24 @@ function fetchTradingView(codeVal) {
     }
     var d = resp.data; // the d[] array
 
-    function r2(v){ var n=safeNum(v); return isNaN(n)?null:Math.round(n*100)/100; }
-    function setField(id, val, colorLevel) {
-      var n = r2(val);
-      var el = document.getElementById(id);
-      if (n !== null) {
-        el.value = n;
-        colorInput(el, colorLevel || 'neutral');
-        el.dataset.autoSet = '1';
-      }
-    }
+    // Use shared setRoDisplay(id, val, suffix, colorClass)
+    function r2(v){ var n=safeNum(v); return isNaN(n)?0:Math.round(n*100)/100; }
 
-    // Fill all fields from TV response
-    // d[] indices per COLUMNS definition in tv-scan.js:
-    // d[1]=price d[14]=EPS d[16]=DivYield d[17]=PE d[18]=NAV d[19]=PBV
-    // d[20]=ROE d[21]=RevGrowth d[22]=EPSGrowth d[23]=TotalLiab d[24]=TotalEquity
-    setField('input-price',  d[1],  'neutral');
-    setField('input-eps',    d[14], 'neutral');
-    setField('input-nav',    d[18], 'neutral');
-    setField('pbv-display',  d[19], r2(d[19])<=1?'green':'orange');
-    setField('yield-display',d[16], 'green');
-    setField('pe-display',   d[17], r2(d[17])<7?'green':r2(d[17])<=8?'orange':'red');
-    setField('input-roe',    d[20], 'neutral');
-    setField('input-revg',   d[21], 'neutral');
-    setField('input-epsg',   d[22], 'neutral');
+    setRoDisplay('input-price',  d[1],  '',  '');
+    setRoDisplay('input-eps',    d[14], '',  '');
+    setRoDisplay('yield-display',d[16], '%', '');
+    setRoDisplay('pe-display',   d[17], '',  r2(d[17])<7?'green':r2(d[17])<=8?'orange':'red');
+    setRoDisplay('input-nav',    d[18], '',  '');
+    setRoDisplay('pbv-display',  d[19], '',  r2(d[19])<=1?'green':'orange');
+    setRoDisplay('input-roe',    d[20], '%', '');
+    setRoDisplay('input-revg',   d[21], '%', '');
+    setRoDisplay('input-epsg',   d[22], '%', '');
 
-    // Total Liabilities and Total Equity — stored as read-only display fields
-    var liabRaw = safeNum(d[23]);
-    var eqRaw   = safeNum(d[24]);
-    var liabEl  = document.getElementById('input-liab');
-    var eqEl    = document.getElementById('input-eq');
-    if (!isNaN(liabRaw)) { liabEl.value = liabRaw; }
-    if (!isNaN(eqRaw))   { eqEl.value   = eqRaw; }
-
-    // D/E = Total Liabilities / Total Equity — calculated in frontend from raw numbers
-    var deEl = document.getElementById('de-display');
-    if (!isNaN(liabRaw) && !isNaN(eqRaw) && eqRaw !== 0) {
-      var deVal = liabRaw / eqRaw;
-      deEl.value = Math.round(deVal * 100) / 100;
-      colorInput(deEl, deVal <= 1 ? 'green' : 'orange');
-      deEl.dataset.autoSet = '1';
-    }
+    // Total Liabilities and Total Equity — raw numbers for D/E calc
+    var liabRaw = safeNum(d[23]); if(isNaN(liabRaw)) liabRaw=0;
+    var eqRaw   = safeNum(d[24]); if(isNaN(eqRaw))   eqRaw=0;
+    setRoDisplay('input-liab', liabRaw, '', '');
+    setRoDisplay('input-eq',   eqRaw,   '', '');
 
     // Update subtitle with TV sector + recommendation badge
     var co = currentCo;
@@ -886,34 +885,33 @@ function colorInput(el, level) {
   el.style.color       = s.color;
 }
 
-function recalc() {
-  // D/E = Total Liabilities / Total Equity (recalculate if user edits liab/eq manually)
-  var liab  = safeNum(document.getElementById('input-liab').value);
-  var eq    = safeNum(document.getElementById('input-eq').value);
-  var deEl  = document.getElementById('de-display');
-  if (!isNaN(liab) && !isNaN(eq) && eq !== 0) {
-    var de = liab / eq;
-    deEl.value = Math.round(de * 100) / 100;
-    colorInput(deEl, de <= 1 ? 'green' : 'orange');
-    deEl.dataset.autoSet = '1';
-  }
-
-  // Total Return = Dividend Yield + ROE
-  var tEl   = document.getElementById('total-display');
-  var dyVal = safeNum(document.getElementById('yield-display').value);
-  var roe   = safeNum(document.getElementById('input-roe').value);
-  if (!isNaN(dyVal) && !isNaN(roe)) {
-    tEl.value = (dyVal + roe).toFixed(2);
-    colorInput(tEl, 'green');
-    tEl.dataset.autoSet = '1';
-  } else {
-    if (tEl.dataset.autoSet === '1') { tEl.value=''; tEl.dataset.autoSet='0'; colorInput(tEl,'neutral'); }
+function setRoDisplay(id, val, sfx, colorClass) {
+  var n = (typeof val === 'number') ? val : safeNum(val);
+  if (isNaN(n)) n = 0;
+  n = Math.round(n * 100) / 100;
+  var h  = document.getElementById(id);
+  var ro = document.getElementById(id+'-ro');
+  if (h)  h.value = n;
+  if (ro) {
+    ro.textContent = n + (sfx||'');
+    ro.className = 'field-ro' + (colorClass ? ' field-ro-'+colorClass : '');
   }
 }
 
-['input-roe','yield-display','input-liab','input-eq'].forEach(function(id){
-  document.getElementById(id).addEventListener('input', recalc);
-});
+function recalc() {
+  // D/E = Total Liabilities / Total Equity
+  var liab = safeNum(document.getElementById('input-liab').value); if(isNaN(liab)) liab=0;
+  var eq   = safeNum(document.getElementById('input-eq').value);   if(isNaN(eq))   eq=0;
+  var de   = (eq !== 0) ? liab / eq : 0;
+  setRoDisplay('de-display', de, '', de<=1?'green':'orange');
+
+  // Total Return = Dividend Yield + ROE
+  var dy  = safeNum(document.getElementById('yield-display').value); if(isNaN(dy))  dy=0;
+  var roe = safeNum(document.getElementById('input-roe').value);     if(isNaN(roe)) roe=0;
+  var tr  = dy + roe;
+  setRoDisplay('total-display', tr, '%', 'green');
+}
+// No event listeners needed — all fields are read-only, recalc called after TV fetch
 
 // ─── SAVE ──────────────────────────────────────────────────────────────────────
 function buildRecord() {
