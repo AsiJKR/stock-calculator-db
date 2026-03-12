@@ -1,6 +1,6 @@
 // netlify/functions/tv-scan.js
 // Proxies a TradingView scanner request to get live stock data for a CSE symbol.
-// Usage: GET /.netlify/functions/tv-scan?symbol=RCL
+// Usage: GET /.netlify/functions/tv-scan?symbol=RCL  or  ?symbol=RCL.N0000
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -9,32 +9,32 @@ const HEADERS = {
 
 const TV_URL = 'https://scanner.tradingview.com/srilanka/scan?label-product=popup-screener-stock';
 
-// The fixed columns we request — order must match the index mapping in the frontend
+// Column order must match frontend index mapping exactly — mirrors the working Postman body
 const COLUMNS = [
-  'description',          // d[0]  company description
-  'close',                // d[1]  last price
-  'type',                 // d[2]
-  'typespecs',            // d[3]
-  'update_mode',          // d[4]
-  'pricescale',           // d[5]
-  'minmov',               // d[6]
-  'fractional',           // d[7]
-  'currency',             // d[8]
-  'sector',               // d[9]  TV sector (english)
-  'country',              // d[10]
-  'sector.tr',            // d[11] TV sector translated / display label
-  'Recommend.All',        // d[12] recommendation key  e.g. "StrongBuy"
-  'Recommend.All|5',      // d[13] recommendation label e.g. "Strong buy"  (some TV endpoints differ)
-  'earnings_per_share_basic_ttm', // d[14] EPS
-  'currency',             // d[15] (duplicate — keeps index alignment)
-  'dividends_yield',      // d[16] Dividend Yield %
-  'price_earnings_ttm',   // d[17] PE Ratio
-  'book_value_per_share_quarterly', // d[18] NAV (book value)
-  'price_book_ratio',     // d[19] PBV
-  'total_debt_to_equity', // d[20] D/E
-  'return_on_equity',     // d[21] ROE %
-  'revenue_growth',       // d[22] Revenue Growth %
-  'earnings_growth',      // d[23] EPS Growth %
+  'ticker-view',                               // d[0]
+  'close',                                     // d[1]  price
+  'type',                                      // d[2]
+  'typespecs',                                 // d[3]
+  'pricescale',                                // d[4]
+  'minmov',                                    // d[5]
+  'fractional',                                // d[6]
+  'minmove2',                                  // d[7]
+  'currency',                                  // d[8]
+  'sector.tr',                                 // d[9]
+  'market',                                    // d[10]
+  'sector',                                    // d[11] sector display label
+  'AnalystRating',                             // d[12] recommendation key e.g. "StrongBuy"
+  'AnalystRating.tr',                          // d[13] recommendation label e.g. "Strong buy"
+  'earnings_per_share_diluted_fy',             // d[14] EPS
+  'fundamental_currency_code',                 // d[15]
+  'dividends_yield',                           // d[16] Dividend Yield %
+  'price_earnings_ttm',                        // d[17] PE Ratio
+  'book_value_per_share_fq',                   // d[18] NAV
+  'price_book_fq',                             // d[19] PBV
+  'debt_to_equity_fq',                         // d[20] D/E
+  'return_on_equity_fy',                       // d[21] ROE %
+  'total_revenue_cagr_5y',                     // d[22] Revenue Growth %
+  'earnings_per_share_diluted_yoy_growth_ttm', // d[23] EPS Growth %
 ];
 
 exports.handler = async function (event) {
@@ -51,16 +51,85 @@ exports.handler = async function (event) {
     };
   }
 
-  // Accept bare code (e.g. "RCL") or full code (e.g. "RCL.N0000")
-  const symbol = symbolParam.trim();
+  // Accept bare code (e.g. "RCL") — append .N0000 if no dot present
+  const raw = symbolParam.trim();
+  const symbol = raw.includes('.') ? raw : raw + '.N0000';
 
+  // Exact request body from working Postman — only filter[0].right is dynamic
   const body = JSON.stringify({
-    filter: [
-      { left: 'name', operation: 'equal', right: symbol }
-    ],
     columns: COLUMNS,
-    sort: { sortBy: 'name', sortOrder: 'asc' },
-    range: [0, 1],
+    filter: [
+      {
+        left: 'ticker-view-filter',
+        operation: 'match',
+        right: symbol,
+      },
+      {
+        left: 'is_primary',
+        operation: 'equal',
+        right: true,
+      },
+    ],
+    ignore_unknown_fields: false,
+    options: { lang: 'en' },
+    range: [0, 5],
+    sort: { sortBy: 'market_cap_basic', sortOrder: 'desc' },
+    symbols: {},
+    markets: ['srilanka'],
+    filter2: {
+      operator: 'and',
+      operands: [
+        {
+          operation: {
+            operator: 'or',
+            operands: [
+              {
+                operation: {
+                  operator: 'and',
+                  operands: [
+                    { expression: { left: 'type', operation: 'equal', right: 'stock' } },
+                    { expression: { left: 'typespecs', operation: 'has', right: ['common'] } },
+                  ],
+                },
+              },
+              {
+                operation: {
+                  operator: 'and',
+                  operands: [
+                    { expression: { left: 'type', operation: 'equal', right: 'stock' } },
+                    { expression: { left: 'typespecs', operation: 'has', right: ['preferred'] } },
+                  ],
+                },
+              },
+              {
+                operation: {
+                  operator: 'and',
+                  operands: [
+                    { expression: { left: 'type', operation: 'equal', right: 'dr' } },
+                  ],
+                },
+              },
+              {
+                operation: {
+                  operator: 'and',
+                  operands: [
+                    { expression: { left: 'type', operation: 'equal', right: 'fund' } },
+                    { expression: { left: 'typespecs', operation: 'has_none_of', right: ['etf'] } },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+        {
+          expression: {
+            left: 'typespecs',
+            operation: 'has_none_of',
+            right: ['pre-ipo'],
+          },
+        },
+      ],
+    },
   });
 
   try {
@@ -70,17 +139,21 @@ exports.handler = async function (event) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (compatible; CSE-Explorer/1.0)',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Origin': 'https://www.tradingview.com',
         'Referer': 'https://www.tradingview.com/',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
       },
       body: body,
     });
 
-    console.log('[tv-scan] TradingView response status:', res.status);
+    console.log('[tv-scan] TradingView status:', res.status);
 
     if (!res.ok) {
-      throw new Error('TradingView API returned HTTP ' + res.status);
+      const errText = await res.text().catch(() => '');
+      console.error('[tv-scan] TradingView error body:', errText);
+      throw new Error('TradingView API returned HTTP ' + res.status + ': ' + errText.slice(0, 200));
     }
 
     const tvData = await res.json();
@@ -96,27 +169,11 @@ exports.handler = async function (event) {
     const row = tvData.data[0];
     const d   = row.d;
 
-    // Map recommendation key to a clean string
-    // TV returns a float for Recommend.All: >0.5=StrongBuy, 0.1–0.5=Buy, etc.
-    // But if they return a string label we use that; otherwise derive it.
-    let recKey   = null;
-    let recLabel = null;
-    const rawRec = d[12];
-    if (typeof rawRec === 'number') {
-      if      (rawRec >= 0.5)  { recKey='StrongBuy';  recLabel='Strong buy'; }
-      else if (rawRec >= 0.1)  { recKey='Buy';         recLabel='Buy'; }
-      else if (rawRec > -0.1)  { recKey='Neutral';     recLabel='Neutral'; }
-      else if (rawRec > -0.5)  { recKey='Sell';        recLabel='Sell'; }
-      else                     { recKey='StrongSell';  recLabel='Strong sell'; }
-    } else if (typeof rawRec === 'string') {
-      recKey   = rawRec;
-      recLabel = d[13] || rawRec;
-    }
-
-    // Normalise the sector label — prefer d[11] (display label), fallback to d[9]
+    const recKey   = d[12] || null;
+    const recLabel = d[13] || null;
     const tvSector = d[11] || d[9] || null;
 
-    console.log('[tv-scan] Success:', symbol, 'price:', d[1], 'rec:', recKey);
+    console.log('[tv-scan] Success:', symbol, '| price:', d[1], '| rec:', recKey, '| sector:', tvSector);
 
     return {
       statusCode: 200,
@@ -124,12 +181,7 @@ exports.handler = async function (event) {
       body: JSON.stringify({
         ok:   true,
         data: d,
-        meta: {
-          symbol:    row.s,
-          tvSector:  tvSector,
-          recKey:    recKey,
-          recLabel:  recLabel,
-        },
+        meta: { symbol: row.s, tvSector, recKey, recLabel },
       }),
     };
 
